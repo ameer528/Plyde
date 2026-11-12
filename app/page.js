@@ -85,7 +85,7 @@ export default function Home() {
             textDecoration: "none",
           }}
         >
-          Get started
+          Get started href="#"
         </a>
       </section>
 
