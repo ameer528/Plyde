@@ -1,6 +1,6 @@
-
 import logo from "./logo-icon.png";
 import Analyzer from "./Analyzer";
+import Prospects from "./Prospects";
 
 export default function Home() {
   return (
@@ -56,6 +56,10 @@ export default function Home() {
           writes the first email.
         </p>
         <Analyzer />
+      </section>
+
+      <section style={{ maxWidth: "720px", margin: "0 auto" }}>
+        <Prospects />
       </section>
     </main>
   );
