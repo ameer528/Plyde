@@ -11,12 +11,26 @@ const card = {
   textAlign: "left",
 };
 
+const input = {
+  padding: "14px",
+  borderRadius: "12px",
+  border: "1px solid #334155",
+  background: "#1E293B",
+  color: "#F8FAFC",
+  fontSize: "16px",
+  fontFamily: "inherit",
+};
+
 export default function Analyzer() {
   const [website, setWebsite] = useState("");
+  const [description, setDescription] = useState("");
+  const [showDescription, setShowDescription] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
   const [copied, setCopied] = useState(false);
+
+  const canSubmit = website.trim() || description.trim();
 
   async function analyze(e) {
     e.preventDefault();
@@ -27,11 +41,15 @@ export default function Analyzer() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ website }),
+        body: JSON.stringify({ website, description }),
       });
       const json = await res.json();
-      if (!res.ok) setError(json.error || "Something went wrong.");
-      else setData(json);
+      if (!res.ok) {
+        setError(json.error || "Something went wrong.");
+        if (json.needsDescription) setShowDescription(true);
+      } else {
+        setData(json);
+      }
     } catch {
       setError("Network problem. Please try again.");
     }
@@ -53,44 +71,68 @@ export default function Analyzer() {
 
   return (
     <div style={{ maxWidth: "560px", margin: "0 auto" }}>
-      <form onSubmit={analyze} style={{ display: "flex", gap: "8px" }}>
-        <input
-          type="text"
-          placeholder="Enter your website, e.g. yourbusiness.com"
-          value={website}
-          onChange={(e) => setWebsite(e.target.value)}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            padding: "14px",
-            borderRadius: "12px",
-            border: "1px solid #334155",
-            background: "#1E293B",
-            color: "#F8FAFC",
-            fontSize: "16px",
-          }}
-        />
-        <button
-          type="submit"
-          disabled={loading || !website.trim()}
-          style={{
-            padding: "14px 20px",
-            borderRadius: "12px",
-            border: "none",
-            background: "linear-gradient(135deg, #7C3AED, #0EA5E9)",
-            color: "#F8FAFC",
-            fontWeight: 600,
-            fontSize: "16px",
-            opacity: loading || !website.trim() ? 0.6 : 1,
-          }}
-        >
-          {loading ? "..." : "Find"}
-        </button>
+      <form onSubmit={analyze}>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <input
+            type="text"
+            placeholder="Your website, e.g. yourbusiness.com"
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+            style={{ ...input, flex: 1, minWidth: 0 }}
+          />
+          <button
+            type="submit"
+            disabled={loading || !canSubmit}
+            style={{
+              padding: "14px 20px",
+              borderRadius: "12px",
+              border: "none",
+              background: "linear-gradient(135deg, #7C3AED, #0EA5E9)",
+              color: "#F8FAFC",
+              fontWeight: 600,
+              fontSize: "16px",
+              opacity: loading || !canSubmit ? 0.6 : 1,
+            }}
+          >
+            {loading ? "..." : "Find"}
+          </button>
+        </div>
+
+        {!showDescription && (
+          <p
+            onClick={() => setShowDescription(true)}
+            style={{
+              color: "#94A3B8",
+              fontSize: "14px",
+              cursor: "pointer",
+              textDecoration: "underline",
+              marginTop: "12px",
+            }}
+          >
+            No website? Describe what you sell instead
+          </p>
+        )}
+
+        {showDescription && (
+          <textarea
+            placeholder="Describe what you sell and who you help. Example: I design websites for local restaurants and cafes."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={4}
+            style={{
+              ...input,
+              width: "100%",
+              boxSizing: "border-box",
+              marginTop: "12px",
+              resize: "vertical",
+            }}
+          />
+        )}
       </form>
 
       {loading && (
         <p style={{ color: "#94A3B8", marginTop: "20px" }}>
-          Reading your website and thinking. This takes about 10 seconds...
+          Thinking. This takes about 10 seconds...
         </p>
       )}
 
@@ -181,11 +223,11 @@ export default function Analyzer() {
           )}
 
           <p style={{ color: "#64748B", fontSize: "13px", textAlign: "center" }}>
-            These are AI suggestions based on your website. Check them before
-            using them.
+            These are AI suggestions based on what you provided. Check them
+            before using them.
           </p>
         </div>
       )}
     </div>
   );
-    }
+              }
