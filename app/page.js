@@ -73,7 +73,7 @@ export default function Home() {
           write personalized outreach, while you stay in full control.
         </p>
         <a
-          href="#"
+          href="/login"
           style={{
             display: "inline-block",
             background: "linear-gradient(135deg, #7C3AED, #0EA5E9)",
@@ -85,7 +85,7 @@ export default function Home() {
             textDecoration: "none",
           }}
         >
-          Get started href="#"
+          Get started
         </a>
       </section>
 
