@@ -52,7 +52,10 @@ async function readSite(url) {
       .replace(/&amp;/g, "&")
       .replace(/\s+/g, " ")
       .trim();
-    return `Title: ${title}\nDescription: ${desc}\nPage text: ${body}`.slice(0, 7000);
+    const text = `Title: ${title}\nDescription: ${desc}\nPage text: ${body}`;
+    // If almost nothing was readable, treat the site as unreadable.
+    if (body.length < 200 && desc.length < 40) return null;
+    return text.slice(0, 7000);
   } catch {
     return null;
   } finally {
@@ -60,11 +63,11 @@ async function readSite(url) {
   }
 }
 
-function buildPrompt(host, siteText) {
+function buildPrompt(label, sourceText) {
   return `You are a sales research assistant for freelancers and small agencies.
-Below is text taken from the website ${host}. Use ONLY this text. Do not invent facts about the business. If something is unclear, say so.
+Below is information about the business "${label}". Use ONLY this information. Do not invent facts about the business. If something is unclear, say so.
 
-${siteText}
+${sourceText}
 
 Return ONLY valid JSON in exactly this shape:
 {
@@ -126,25 +129,44 @@ export async function POST(request) {
     return Response.json({ error: "Bad request." }, { status: 400 });
   }
 
-  const url = cleanUrl(body.website);
-  if (!url) {
+  const description = String(body.description || "").trim().slice(0, 2000);
+  const websiteInput = String(body.website || "").trim();
+  const url = websiteInput ? cleanUrl(websiteInput) : null;
+
+  if (websiteInput && !url && !description) {
     return Response.json(
       { error: "Please enter a valid website, like example.com" },
       { status: 400 }
     );
   }
-
-  const siteText = await readSite(url.toString());
-  if (!siteText) {
+  if (!websiteInput && !description) {
     return Response.json(
-      { error: "We could not read that website. Check the link and try again." },
+      { error: "Enter a website or describe what you sell." },
+      { status: 400 }
+    );
+  }
+
+  const siteText = url ? await readSite(url.toString()) : null;
+
+  if (!siteText && !description) {
+    return Response.json(
+      {
+        error:
+          "We could not read that website. Describe what you sell below and we will use that instead.",
+        needsDescription: true,
+      },
       { status: 422 }
     );
   }
 
-  const answer = await askGemini(buildPrompt(url.hostname, siteText));
+  let sourceText = "";
+  if (siteText) sourceText += `Website text:\n${siteText}\n\n`;
+  if (description) sourceText += `Description written by the owner:\n${description}`;
+
+  const label = url ? url.hostname : "this business";
+  const answer = await askGemini(buildPrompt(label, sourceText));
   if (answer.error) {
     return Response.json({ error: answer.error }, { status: 502 });
   }
-  return Response.json({ site: url.hostname, result: answer.result });
-      }
+  return Response.json({ site: label, result: answer.result });
+        }
