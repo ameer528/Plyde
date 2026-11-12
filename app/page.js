@@ -1,5 +1,6 @@
 import logo from "./logo-icon.png";
 import Analyzer from "./Analyzer";
+import Discover from "./Discover";
 import Prospects from "./Prospects";
 
 export default function Home() {
@@ -53,9 +54,13 @@ export default function Home() {
           }}
         >
           Enter your website. Plyde works out who is likely to buy from you and
-          writes the first email.
+          finds companies that match.
         </p>
         <Analyzer />
+      </section>
+
+      <section style={{ maxWidth: "720px", margin: "0 auto" }}>
+        <Discover />
       </section>
 
       <section style={{ maxWidth: "720px", margin: "0 auto" }}>
@@ -63,4 +68,4 @@ export default function Home() {
       </section>
     </main>
   );
-            }
+}
