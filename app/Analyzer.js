@@ -48,7 +48,7 @@ export default function Analyzer() {
         setError(json.error || "Something went wrong.");
         if (json.needsDescription) setShowDescription(true);
       } else {
-        setData(json);
+        setData(json); try { localStorage.setItem("plyde_profile", JSON.stringify(json.result)); window.dispatchEvent(new Event("plyde-profile")); } catch {}
       }
     } catch {
       setError("Network problem. Please try again.");
