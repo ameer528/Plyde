@@ -1,23 +1,6 @@
-import logo from "./logo-icon.png";
 
-const features = [
-  {
-    title: "Smart prospecting",
-    text: "Add businesses and see why each one might need your service.",
-  },
-  {
-    title: "Personalized outreach",
-    text: "Get email drafts based on each prospect's real website.",
-  },
-  {
-    title: "You stay in control",
-    text: "Nothing is sent until you review, edit and approve it.",
-  },
-  {
-    title: "Pipeline and follow-ups",
-    text: "Track every prospect and never forget a follow-up.",
-  },
-];
+import logo from "./logo-icon.png";
+import Analyzer from "./Analyzer";
 
 export default function Home() {
   return (
@@ -46,7 +29,7 @@ export default function Home() {
         style={{
           maxWidth: "720px",
           margin: "0 auto",
-          padding: "64px 0 48px",
+          padding: "48px 0 24px",
           textAlign: "center",
         }}
       >
@@ -69,53 +52,11 @@ export default function Home() {
             maxWidth: "520px",
           }}
         >
-          Plyde helps freelancers and small agencies research prospects and
-          write personalized outreach, while you stay in full control.
+          Enter your website. Plyde works out who is likely to buy from you and
+          writes the first email.
         </p>
-        <a
-          href="/login"
-          style={{
-            display: "inline-block",
-            background: "linear-gradient(135deg, #7C3AED, #0EA5E9)",
-            color: "#F8FAFC",
-            padding: "14px 32px",
-            borderRadius: "12px",
-            fontWeight: 600,
-            fontSize: "16px",
-            textDecoration: "none",
-          }}
-        >
-          Get started
-        </a>
-      </section>
-
-      <section
-        style={{
-          maxWidth: "960px",
-          margin: "0 auto",
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "16px",
-          paddingBottom: "48px",
-        }}
-      >
-        {features.map((f) => (
-          <div
-            key={f.title}
-            style={{
-              background: "#1E293B",
-              border: "1px solid #334155",
-              borderRadius: "16px",
-              padding: "20px",
-            }}
-          >
-            <h3 style={{ margin: "0 0 8px", fontSize: "18px" }}>{f.title}</h3>
-            <p style={{ margin: 0, color: "#94A3B8", lineHeight: 1.5 }}>
-              {f.text}
-            </p>
-          </div>
-        ))}
+        <Analyzer />
       </section>
     </main>
   );
-}
+            }
