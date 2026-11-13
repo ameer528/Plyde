@@ -1,8 +1,4 @@
-const MODELS = [
-  "gemini-3.5-flash-lite",
-  "gemini-3.8-flash",
-  "gemini-flash-latest",
-];
+import { askAI } from "../../ai";
 
 function cleanUrl(input) {
   let value = String(input || "").trim();
@@ -82,40 +78,6 @@ Return ONLY valid JSON in exactly this shape:
 Give 5 segments, sorted by fit_score from highest to lowest.`;
 }
 
-async function askGemini(prompt) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return { error: "The AI key is missing on the server." };
-  let lastStatus = 0;
-  for (const model of MODELS) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: "POST",
-          signal: AbortSignal.timeout(20000),
-          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" },
-          }),
-        }
-      );
-      lastStatus = res.status;
-      if (!res.ok) continue;
-      const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      const clean = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
-      return { result: JSON.parse(clean) };
-    } catch {
-      continue;
-    }
-  }
-  if (lastStatus === 429) {
-    return { error: "The free AI limit was reached. Please try again in a few minutes." };
-  }
-  return { error: "The AI could not answer right now. Please try again." };
-}
-
 export async function POST(request) {
   let body;
   try {
@@ -159,7 +121,7 @@ export async function POST(request) {
   if (description) sourceText += `Description written by the owner:\n${description}`;
 
   const label = url ? url.hostname : "this business";
-  const answer = await askGemini(buildPrompt(label, sourceText));
+  const answer = await askAI(buildPrompt(label, sourceText));
   if (answer.error) {
     return Response.json({ error: answer.error }, { status: 502 });
   }
