@@ -118,23 +118,74 @@ function findContactPage(html, baseUrl) {
   return null;
 }
 
-function buildPrompt(host, profile, siteText) {
-  return `You are a careful sales research assistant.
+const SOCIAL_HOSTS = [
+  ["x", /^(?:www\.)?(?:x|twitter)\.com$/i],
+  ["linkedin", /^(?:[a-z]{2,3}\.)?linkedin\.com$/i],
+  ["instagram", /^(?:www\.)?instagram\.com$/i],
+  ["tiktok", /^(?:www\.)?tiktok\.com$/i],
+  ["facebook", /^(?:www\.|m\.)?facebook\.com$/i],
+  ["youtube", /^(?:www\.)?youtube\.com$/i],
+];
+
+const BLOCKED_FIRST = [
+  "intent", "share", "sharer", "sharer.php", "login", "signup", "dialog",
+  "plugins", "hashtag", "search", "embed", "watch", "results", "i", "home",
+  "policies", "legal", "explore", "tr", "p", "reel", "reels", "privacy",
+  "help", "about", "settings", "tos", "ads",
+];
+
+function findSocials(html, baseUrl, into) {
+  const links = html.matchAll(/<a[^>]+href=["']([^"']+)["']/gi);
+  for (const m of links) {
+    let u;
+    try {
+      u = new URL(m[1], baseUrl);
+    } catch {
+      continue;
+    }
+    if (u.protocol !== "https:" && u.protocol !== "http:") continue;
+    const host = u.hostname.toLowerCase();
+    for (const [key, pattern] of SOCIAL_HOSTS) {
+      if (!pattern.test(host) || into[key]) continue;
+      const first = (u.pathname.split("/")[1] || "").toLowerCase();
+      if (!first || BLOCKED_FIRST.includes(first)) continue;
+      if (key === "linkedin" && !["company", "in", "school"].includes(first)) continue;
+      if (key === "tiktok" && !first.startsWith("@")) continue;
+      if (
+        key === "youtube" &&
+        !(first.startsWith("@") || ["channel", "c", "user"].includes(first))
+      )
+        continue;
+      into[key] = ("https://" + host + u.pathname).replace(/\/$/, "");
+    }
+  }
+}
+
+function buildPrompt(host, profile, siteText, channels) {
+  return `You are a careful sales research assistant and an honest copywriter.
 
 The user sells: ${profile.summary}
 The user wants to reach: ${profile.target || "businesses that need this service"}
+${profile.edge ? "What could make the user stand out: " + profile.edge : ""}
 
-Below is text from the website of a possible prospect (${host}). Use ONLY this text. Never invent facts. If you are inferring something, use words like "possibly" or "may". Do not include any contact details.
+Below is text from the website of a possible prospect (${host}). Use ONLY this text for facts about the prospect. Never invent facts. If you are inferring something, use words like "possibly" or "may". Do not put contact details in your analysis.
 
 ${siteText}
 
-Return ONLY valid JSON in exactly this shape:
+Write outreach drafts for these channels: ${channels.join(", ")}.
+Rules for the drafts: natural and human, no hype, no flattery, no fake claims. Mention one specific, real detail from their site. Never say you used their product or saw anything not in the text above. Do not invent facts about the user beyond what is stated above. Use [First name] for the recipient and sign off with [Your name]. End with one low-pressure question.
+Length limits: email under 110 words; x under 270 characters; linkedin under 70 words; instagram, tiktok, facebook and youtube under 45 words.
+
+Return ONLY valid JSON in exactly this shape (include only the requested channels inside drafts; email is an object, every other channel is a string):
 {
   "company_summary": "1-2 sentences on what this company does, only from the text",
   "fit_score": 0-100,
   "fit_reason": "1-2 sentences on why they might need the user's service",
-  "evidence": "a short paraphrase of something on their site that supports your reasoning, or 'none found'",
-  "confidence": "low, medium or high"
+  "evidence": "a short paraphrase of something on their site that supports this, or 'none found'",
+  "confidence": "low, medium or high",
+  "drafts": {
+    "email": { "subject": "short subject", "body": "the email" }
+  }
 }`;
 }
 
@@ -159,7 +210,7 @@ async function askGemini(prompt) {
       if (!res.ok) continue;
       const data = await res.json();
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      const clean = text.replace(/```json|```/g, "").trim();
+      const clean = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
       return { result: JSON.parse(clean) };
     } catch {
       continue;
@@ -186,6 +237,7 @@ export async function POST(request) {
   const profile = {
     summary: String(body.profile?.summary || "").slice(0, 1500),
     target: String(body.profile?.target || "").slice(0, 300),
+    edge: String(body.profile?.edge || "").slice(0, 500),
   };
   if (!profile.summary) {
     return Response.json({ error: "Missing your business profile." }, { status: 400 });
@@ -205,7 +257,9 @@ export async function POST(request) {
 
   const home = textFrom(homeHtml);
   const emails = [];
+  const socials = {};
   findEmails(homeHtml, url.toString(), emails);
+  findSocials(homeHtml, url.toString(), socials);
 
   const contactPage = findContactPage(homeHtml, url.toString());
   let contactText = "";
@@ -213,6 +267,7 @@ export async function POST(request) {
     const contactHtml = await getHtml(contactPage);
     if (contactHtml) {
       findEmails(contactHtml, contactPage, emails);
+      findSocials(contactHtml, contactPage, socials);
       contactText = textFrom(contactHtml).body.slice(0, 1500);
     }
   }
@@ -224,23 +279,39 @@ export async function POST(request) {
     );
   }
 
+  const channels = ["email", ...Object.keys(socials)];
   const siteText = `Title: ${home.title}\nDescription: ${home.desc}\nPage text: ${home.body.slice(0, 4500)}\nContact page text: ${contactText}`;
-  const answer = await askGemini(buildPrompt(url.hostname, profile, siteText));
+  const answer = await askGemini(buildPrompt(url.hostname, profile, siteText, channels));
   if (answer.error) {
     return Response.json({ error: answer.error }, { status: 502 });
   }
 
   const r = answer.result || {};
-  const score = Math.max(0, Math.min(100, Number(r.fit_score) || 0));
+  const rawDrafts = r.drafts || {};
+  const drafts = {};
+  if (rawDrafts.email && typeof rawDrafts.email === "object") {
+    drafts.email = {
+      subject: String(rawDrafts.email.subject || "").slice(0, 200),
+      body: String(rawDrafts.email.body || "").slice(0, 2000),
+    };
+  }
+  for (const key of Object.keys(socials)) {
+    if (typeof rawDrafts[key] === "string") {
+      drafts[key] = rawDrafts[key].slice(0, 1200);
+    }
+  }
+
   return Response.json({
     site: url.hostname,
     url: url.toString(),
     company_summary: r.company_summary || "",
-    fit_score: score,
+    fit_score: Math.max(0, Math.min(100, Number(r.fit_score) || 0)),
     fit_reason: r.fit_reason || "",
     evidence: r.evidence || "none found",
     confidence: r.confidence || "low",
     emails: emails.slice(0, 3),
+    socials,
     contact_page: contactPage,
+    drafts,
   });
-  }
+   }
