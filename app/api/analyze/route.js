@@ -26,11 +26,9 @@ function cleanUrl(input) {
 }
 
 async function readSite(url) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
   try {
     const res = await fetch(url, {
-      signal: controller.signal,
+      signal: AbortSignal.timeout(8000),
       headers: { "User-Agent": "PlydeBot/0.1 (website analysis)" },
     });
     if (!res.ok) return null;
@@ -52,14 +50,10 @@ async function readSite(url) {
       .replace(/&amp;/g, "&")
       .replace(/\s+/g, " ")
       .trim();
-    const text = `Title: ${title}\nDescription: ${desc}\nPage text: ${body}`;
-    // If almost nothing was readable, treat the site as unreadable.
     if (body.length < 200 && desc.length < 40) return null;
-    return text.slice(0, 7000);
+    return `Title: ${title}\nDescription: ${desc}\nPage text: ${body}`.slice(0, 7000);
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -98,6 +92,7 @@ async function askGemini(prompt) {
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
         {
           method: "POST",
+          signal: AbortSignal.timeout(20000),
           headers: { "Content-Type": "application/json", "x-goog-api-key": key },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
@@ -109,7 +104,7 @@ async function askGemini(prompt) {
       if (!res.ok) continue;
       const data = await res.json();
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      const clean = text.replace(/```json|```/g, "").trim();
+      const clean = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
       return { result: JSON.parse(clean) };
     } catch {
       continue;
@@ -169,4 +164,4 @@ export async function POST(request) {
     return Response.json({ error: answer.error }, { status: 502 });
   }
   return Response.json({ site: label, result: answer.result });
-        }
+}
