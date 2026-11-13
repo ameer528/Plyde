@@ -1,7 +1,5 @@
 import logo from "./logo-icon.png";
-import Analyzer from "./Analyzer";
-import Discover from "./Discover";
-import Prospects from "./Prospects";
+import Flow from "./Flow";
 
 export default function Home() {
   return (
@@ -30,7 +28,7 @@ export default function Home() {
         style={{
           maxWidth: "720px",
           margin: "0 auto",
-          padding: "48px 0 24px",
+          padding: "48px 0 48px",
           textAlign: "center",
         }}
       >
@@ -53,18 +51,10 @@ export default function Home() {
             maxWidth: "520px",
           }}
         >
-          Enter your website. Plyde works out who is likely to buy from you and
-          finds companies that match.
+          Enter your website. Plyde studies your market, finds companies that
+          need you, and writes the outreach.
         </p>
-        <Analyzer />
-      </section>
-
-      <section style={{ maxWidth: "720px", margin: "0 auto" }}>
-        <Discover />
-      </section>
-
-      <section style={{ maxWidth: "720px", margin: "0 auto" }}>
-        <Prospects />
+        <Flow />
       </section>
     </main>
   );
