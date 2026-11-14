@@ -1,9 +1,9 @@
-import Flow from "./Flow";
+import Home from "./Home";
 
-export default function Home() {
+export default function Page() {
   return (
     <main>
-      <Flow />
+      <Home />
     </main>
   );
 }
