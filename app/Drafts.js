@@ -11,14 +11,31 @@ function loadDraft(site) {
   }
 }
 
+function savedName() {
+  try {
+    return localStorage.getItem("plyde_name") || "";
+  } catch {
+    return "";
+  }
+}
+
+function fillName(text, name) {
+  return name ? String(text).replace(/\[Your name\]/gi, name) : text;
+}
+
 function EmailBox({ d, gmail, copy, copied, onSent, sentInfo }) {
   const email = d.drafts.email;
+  const [myName] = useState(savedName);
   const [init] = useState(() => loadDraft(d.site) || {});
   const [to, setTo] = useState(
     init.to !== undefined ? init.to : d.emails && d.emails[0] ? d.emails[0].email : ""
   );
-  const [subject, setSubject] = useState(init.subject !== undefined ? init.subject : email.subject);
-  const [body, setBody] = useState(init.body !== undefined ? init.body : email.body);
+  const [subject, setSubject] = useState(
+    init.subject !== undefined ? init.subject : fillName(email.subject, myName)
+  );
+  const [body, setBody] = useState(
+    init.body !== undefined ? init.body : fillName(email.body, myName)
+  );
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -35,7 +52,7 @@ function EmailBox({ d, gmail, copy, copied, onSent, sentInfo }) {
       return;
     }
     if (/\[[^\]]+\]/.test(subject + " " + body)) {
-      setMsg("Replace the [placeholders], like [First name] and [Your name], before sending.");
+      setMsg("Replace the [placeholders] in the message before sending.");
       return;
     }
     const ok = window.confirm(
@@ -101,11 +118,11 @@ function EmailBox({ d, gmail, copy, copied, onSent, sentInfo }) {
         </div>
         {msg && <p className={"msg" + (msg === "Sent." ? " ok" : "")}>{msg}</p>}
         {sentInfo && msg !== "Sent." && (
-          <p className="note">
+          <p className="note-s">
             You already emailed {sentInfo.to} on {new Date(sentInfo.at).toLocaleDateString()}.
           </p>
         )}
-        <p className="note">
+        <p className="note-s">
           An opt-out line is added to every email. Limit: 20 emails per day.
         </p>
       </div>
@@ -115,6 +132,7 @@ function EmailBox({ d, gmail, copy, copied, onSent, sentInfo }) {
 
 export default function Drafts({ d, copy, copied, gmail, onSent, sentInfo }) {
   const drafts = d.drafts || {};
+  const [myName] = useState(savedName);
   return (
     <div>
       {drafts.email && (
@@ -130,12 +148,13 @@ export default function Drafts({ d, copy, copied, gmail, onSent, sentInfo }) {
       {Object.keys(LABELS).map((key) => {
         if (!drafts[key] || !d.socials || !d.socials[key]) return null;
         const id = d.site + "-" + key;
+        const text = fillName(drafts[key], myName);
         return (
           <details className="draft" key={key}>
             <summary>{LABELS[key]} message</summary>
             <div className="draft-body">
-              <p style={{ whiteSpace: "pre-wrap", margin: "12px 0" }}>{drafts[key]}</p>
-              <button className="btn" onClick={() => copy(id, drafts[key], d.socials[key])}>
+              <p style={{ whiteSpace: "pre-wrap", margin: "12px 0" }}>{text}</p>
+              <button className="btn" onClick={() => copy(id, text, d.socials[key])}>
                 {copied === id ? "Copied" : `Copy and open ${LABELS[key]}`}
               </button>
             </div>
@@ -144,4 +163,4 @@ export default function Drafts({ d, copy, copied, gmail, onSent, sentInfo }) {
       })}
     </div>
   );
-                                                         }
+            }
