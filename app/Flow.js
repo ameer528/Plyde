@@ -1,220 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-
-const card = {
-  background: "#1E293B",
-  border: "1px solid #334155",
-  borderRadius: "16px",
-  padding: "18px",
-  marginBottom: "14px",
-  textAlign: "left",
-};
-
-const field = {
-  padding: "14px",
-  borderRadius: "12px",
-  border: "1px solid #334155",
-  background: "#1E293B",
-  color: "#F8FAFC",
-  fontSize: "16px",
-  fontFamily: "inherit",
-};
-
-const ghost = {
-  padding: "8px 14px",
-  borderRadius: "10px",
-  border: "1px solid #334155",
-  background: "transparent",
-  color: "#F8FAFC",
-  fontSize: "14px",
-  cursor: "pointer",
-  textDecoration: "none",
-  display: "inline-block",
-};
-
-const solid = {
-  padding: "10px 16px",
-  borderRadius: "10px",
-  border: "none",
-  background: "linear-gradient(135deg, #7C3AED, #0EA5E9)",
-  color: "#F8FAFC",
-  fontSize: "14px",
-  fontWeight: 600,
-  cursor: "pointer",
-  textDecoration: "none",
-  display: "inline-block",
-};
-
-const LABELS = {
-  x: "X",
-  linkedin: "LinkedIn",
-  instagram: "Instagram",
-  tiktok: "TikTok",
-  facebook: "Facebook",
-  youtube: "YouTube",
-};
-
-const STAGES = {
-  early: "Early stage",
-  growing: "Growing",
-};
-
-function scoreColor(score) {
-  if (score >= 75) return "#10B981";
-  if (score >= 50) return "#F59E0B";
-  return "#EF4444";
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-async function post(path, body) {
-  try {
-    const res = await fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    let json = {};
-    try {
-      json = await res.json();
-    } catch {}
-    return { ok: res.ok, json };
-  } catch {
-    return { ok: false, json: { error: "Network problem. Please try again." } };
-  }
-}
-
-function EmailBox({ d, gmail, copy, copied, onSent, sentInfo }) {
-  const email = d.drafts.email;
-  const [to, setTo] = useState(d.emails && d.emails[0] ? d.emails[0].email : "");
-  const [subject, setSubject] = useState(email.subject);
-  const [body, setBody] = useState(email.body);
-  const [sending, setSending] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  async function send() {
-    setMsg("");
-    if (!to.trim()) {
-      setMsg("Add the recipient's email first.");
-      return;
-    }
-    if (/\[[^\]]+\]/.test(subject + " " + body)) {
-      setMsg("Replace the [placeholders], like [First name] and [Your name], before sending.");
-      return;
-    }
-    const ok = window.confirm(
-      `Send this email to ${to.trim()} from ${gmail.email || "your Gmail"}?`
-    );
-    if (!ok) return;
-    setSending(true);
-    const r = await post("/api/gmail/send", {
-      to: to.trim(),
-      subject,
-      body,
-      approved: true,
-    });
-    setSending(false);
-    if (r.ok) {
-      setMsg("Sent.");
-      onSent(d.site, to.trim(), subject);
-    } else {
-      setMsg(r.json.error || "Could not send.");
-      if (r.json.reconnect) gmail.refresh();
-    }
-  }
-
-  return (
-    <details open style={{ marginBottom: "8px" }}>
-      <summary style={{ cursor: "pointer", fontWeight: 600 }}>Email draft</summary>
-      <div style={{ marginTop: "10px" }}>
-        <label style={{ color: "#94A3B8", fontSize: "13px" }}>To</label>
-        <input
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          placeholder="Recipient email (no public email was found)"
-          style={{ ...field, width: "100%", boxSizing: "border-box", padding: "10px", margin: "4px 0 10px" }}
-        />
-        <label style={{ color: "#94A3B8", fontSize: "13px" }}>Subject</label>
-        <input
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-          style={{ ...field, width: "100%", boxSizing: "border-box", padding: "10px", margin: "4px 0 10px" }}
-        />
-        <label style={{ color: "#94A3B8", fontSize: "13px" }}>Message</label>
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          rows={9}
-          style={{ ...field, width: "100%", boxSizing: "border-box", padding: "10px", margin: "4px 0 10px", lineHeight: 1.5 }}
-        />
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-          {gmail.connected ? (
-            <button style={{ ...solid, opacity: sending ? 0.6 : 1 }} disabled={sending} onClick={send}>
-              {sending ? "Sending..." : "Send"}
-            </button>
-          ) : (
-            <a href="/api/gmail/connect" style={solid}>
-              Connect Gmail to send
-            </a>
-          )}
-          <button style={ghost} onClick={() => copy(d.site + "-email", `Subject: ${subject}\n\n${body}`)}>
-            {copied === d.site + "-email" ? "Copied" : "Copy"}
-          </button>
-          <a
-            href={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`}
-            target="_blank"
-            rel="noreferrer"
-            style={ghost}
-          >
-            Open in Gmail
-          </a>
-        </div>
-        {msg && (
-          <p style={{ margin: "10px 0 0", color: msg === "Sent." ? "#10B981" : "#F59E0B", fontSize: "14px" }}>
-            {msg}
-          </p>
-        )}
-        {sentInfo && msg !== "Sent." && (
-          <p style={{ margin: "10px 0 0", color: "#94A3B8", fontSize: "13px" }}>
-            You already emailed {sentInfo.to} on {new Date(sentInfo.at).toLocaleDateString()}.
-          </p>
-        )}
-        <p style={{ margin: "10px 0 0", color: "#64748B", fontSize: "12px" }}>
-          An opt-out line is added to every email automatically. Limit: 20 emails per day.
-        </p>
-      </div>
-    </details>
-  );
-}
-
-function Drafts({ d, copy, copied, gmail, onSent, sentInfo }) {
-  const drafts = d.drafts || {};
-  return (
-    <div>
-      {drafts.email && (
-        <EmailBox d={d} gmail={gmail} copy={copy} copied={copied} onSent={onSent} sentInfo={sentInfo} />
-      )}
-      {Object.keys(LABELS).map((key) => {
-        if (!drafts[key] || !d.socials || !d.socials[key]) return null;
-        const id = d.site + "-" + key;
-        return (
-          <details key={key} style={{ marginBottom: "8px" }}>
-            <summary style={{ cursor: "pointer", fontWeight: 600 }}>{LABELS[key]} message</summary>
-            <p style={{ margin: "10px 0", color: "#CBD5E1", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-              {drafts[key]}
-            </p>
-            <button style={ghost} onClick={() => copy(id, drafts[key], d.socials[key])}>
-              {copied === id ? "Copied" : `Copy and open ${LABELS[key]}`}
-            </button>
-          </details>
-        );
-      })}
-    </div>
-  );
-}
+import { card, field, sleep, post } from "./ui";
+import Company from "./Company";
 
 export default function Flow() {
   const [website, setWebsite] = useState("");
@@ -527,67 +315,56 @@ export default function Flow() {
         <div style={{ marginTop: "8px" }}>
           <h3 style={{ textAlign: "center" }}>Early companies that may need you</h3>
           {cards.map((d) => (
-            <div key={d.site} style={card}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}>
-                <strong style={{ wordBreak: "break-all" }}>{d.site}</strong>
-                <span
-                  style={{
-                    background: scoreColor(d.fit_score),
-                    color: "#0F172A",
-                    fontWeight: 700,
-                    borderRadius: "8px",
-                    padding: "2px 10px",
-                    height: "fit-content",
-                  }}
-                >
-                  {d.fit_score}%
-                </span>
-              </div>
-              <p style={{ margin: "6px 0 0", color: "#94A3B8", fontSize: "13px" }}>
-                {STAGES[d.stage] || "Growing"} (AI guess: {d.stage_evidence})
-              </p>
-              <p style={{ color: "#CBD5E1", margin: "10px 0 6px", lineHeight: 1.5 }}>{d.company_summary}</p>
-              <p style={{ color: "#94A3B8", margin: "0 0 6px", fontSize: "14px", lineHeight: 1.5 }}>
-                <strong style={{ color: "#CBD5E1" }}>Why they might need you: </strong>
-                {d.fit_reason}
-              </p>
-              <p style={{ color: "#94A3B8", margin: "0 0 12px", fontSize: "14px" }}>
-                <strong style={{ color: "#CBD5E1" }}>Evidence: </strong>
-                {d.evidence} (AI confidence: {d.confidence})
-              </p>
+            <Company
+              key={d.site}
+              d={d}
+              copy={copy}
+              copied={copied}
+              gmail={{ ...gmail, refresh: refreshGmail }}
+              onSent={onSent}
+              sentInfo={sentLog.find((x) => x.site === d.site)}
+            />
+          ))}
 
-              <div style={{ fontSize: "14px", marginBottom: "12px" }}>
-                <strong style={{ color: "#CBD5E1" }}>Public contact: </strong>
-                {d.emails && d.emails.length > 0 ? (
-                  d.emails.map((m) => (
-                    <div key={m.email} style={{ color: "#94A3B8" }}>
-                      {m.email}{" "}
-                      <a href={m.source} target="_blank" rel="noreferrer" style={{ color: "#0EA5E9" }}>
-                        (source)
-                      </a>
-                    </div>
-                  ))
-                ) : (
-                  <span style={{ color: "#94A3B8" }}>
-                    No public email found.{" "}
-                    {d.contact_page && (
-                      <a href={d.contact_page} target="_blank" rel="noreferrer" style={{ color: "#0EA5E9" }}>
-                        Their contact page
-                      </a>
-                    )}
-                  </span>
-                )}
-                {d.socials && Object.keys(d.socials).length > 0 && (
-                  <div style={{ marginTop: "8px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    {Object.keys(d.socials).map((k) => (
-                      <a key={k} href={d.socials[k]} target="_blank" rel="noreferrer" style={ghost}>
-                        {LABELS[k]}
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </div>
+          {ready && !busy && (
+            <button
+              onClick={fillBatch}
+              style={{
+                width: "100%",
+                padding: "14px",
+                borderRadius: "12px",
+                border: "none",
+                background: "linear-gradient(135deg, #7C3AED, #0EA5E9)",
+                color: "#F8FAFC",
+                fontWeight: 600,
+                fontSize: "16px",
+                marginBottom: "12px",
+              }}
+            >
+              Find 5 more
+            </button>
+          )}
 
-              <Drafts
-                d={d}
-             
+          <p style={{ textAlign: "center", color: "#64748B", fontSize: "13px" }}>
+            {unreadable > 0 ? `${unreadable} site(s) could not be read. ` : ""}
+            {dropped > 0 ? `${dropped} established company(ies) were left out. ` : ""}
+            Stages, scores and drafts are AI-written from public websites. Review everything before you send.
+          </p>
+        </div>
+      )}
+
+      {sentLog.length > 0 && (
+        <details style={{ marginTop: "20px" }}>
+          <summary style={{ cursor: "pointer", color: "#CBD5E1", fontWeight: 600 }}>
+            Sent emails ({sentLog.length})
+          </summary>
+          {sentLog.map((s) => (
+            <p key={s.at} style={{ color: "#94A3B8", fontSize: "13px", margin: "8px 0" }}>
+              {new Date(s.at).toLocaleString()}: {s.subject} to {s.to} ({s.site})
+            </p>
+          ))}
+        </details>
+      )}
+    </div>
+  );
+    }
