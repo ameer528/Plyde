@@ -18,6 +18,7 @@ export default function Flow() {
   const [dropped, setDropped] = useState(0);
   const [copied, setCopied] = useState("");
   const [ready, setReady] = useState(false);
+  const [restored, setRestored] = useState(false);
   const [gmail, setGmail] = useState({ connected: false, email: "", loaded: false });
   const [banner, setBanner] = useState("");
   const [sentLog, setSentLog] = useState([]);
@@ -43,6 +44,25 @@ export default function Flow() {
     try {
       setSentLog(JSON.parse(localStorage.getItem("plyde_sent_log") || "[]"));
     } catch {}
+    try {
+      const s = JSON.parse(localStorage.getItem("plyde_session") || "null");
+      if (s && s.profile) {
+        setProfile(s.profile);
+        setMarket(s.market || null);
+        setCards(s.cards || []);
+        setUnreadable(s.unreadable || 0);
+        setDropped(s.dropped || 0);
+        setWebsite(s.website || "");
+        setDescription(s.description || "");
+        if (s.ctx) {
+          ctx.current = s.ctx;
+          setReady(true);
+        }
+        queue.current = s.queue || [];
+        seen.current = new Set(s.seen || []);
+      }
+    } catch {}
+    setRestored(true);
     const q = new URLSearchParams(window.location.search).get("gmail");
     if (q) {
       const texts = {
@@ -54,6 +74,27 @@ export default function Flow() {
       window.history.replaceState({}, "", "/");
     }
   }, []);
+
+  useEffect(() => {
+    if (!restored || !profile) return;
+    try {
+      localStorage.setItem(
+        "plyde_session",
+        JSON.stringify({
+          profile,
+          market,
+          cards,
+          unreadable,
+          dropped,
+          website,
+          description,
+          ctx: ctx.current,
+          queue: queue.current,
+          seen: [...seen.current],
+        })
+      );
+    } catch {}
+  }, [restored, profile, market, cards, unreadable, dropped, ready]);
 
   async function disconnectGmail() {
     try {
@@ -367,4 +408,4 @@ export default function Flow() {
       )}
     </div>
   );
-    }
+      }
