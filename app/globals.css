@@ -178,4 +178,8 @@ details.draft[open] summary::after { content: "\2212"; }
 }
 .caret.on { opacity: 1; animation: blink 0.7s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .caret.on { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .caret.on { animation: none; } }.sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+.hero h1 { min-height: 3em; }
