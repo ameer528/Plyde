@@ -27,19 +27,24 @@ function skipHost(host) {
 }
 
 async function makeQueries(profile) {
-  const t = profile.target || "business";
+  const t = profile.target || "small business";
   const fallback = [
-    `${t} startup just launched`,
-    `${t} early stage company beta waitlist`,
-    `new ${t} startup founded 2026`,
+    `${t} small business official website`,
+    `new ${t} business just launched`,
+    `${t} growing company official website`,
   ];
 
-  const prompt = `A freelancer sells this: ${profile.summary}
-They want to reach: ${t}
+  const prompt = `A freelancer or small company sells this: ${profile.summary}
+Their ideal customer type: ${t}
 
-Write 3 different web search queries that find the OFFICIAL WEBSITES of EARLY-STAGE companies that fit this target: just launched, in beta, pre-seed or seed stage, small team, roughly under 2 years old. The current year is 2026.
-Use words like "just launched", "beta", "waitlist", "early access", "seed", or "founded 2026", whichever fit the target.
-Avoid queries that return big famous companies, news articles, blog posts or lists.
+Write 3 different web search queries that find the OFFICIAL WEBSITES of small or new businesses that would BUY this. Think about what kind of business the BUYER runs (for example: an online store, an agency, a clinic, a coach, a school, a local shop, a startup in some field) and search for those buyers.
+
+Rules:
+- Describe the BUYER's business. Never describe the seller's own product category. Do NOT write queries that would return companies that build, sell or compete with what this freelancer sells.
+- Prefer early-stage or small buyers. Use words about the buyer's business such as "new", "just launched", "launching soon", "founded 2025" or "small team" when they fit.
+- Avoid queries that return big famous companies, news articles, blog posts or lists.
+- The current year is 2026.
+- Make the 3 queries clearly different from each other (different kinds of buyers or different wording).
 
 Return ONLY valid JSON: {"queries": ["query 1", "query 2", "query 3"]}`;
 
