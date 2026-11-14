@@ -1,15 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { field, ghost, solid, LABELS, post } from "./ui";
+
+function loadDraft(site) {
+  try {
+    return JSON.parse(localStorage.getItem("plyde_draft_" + site) || "null");
+  } catch {
+    return null;
+  }
+}
 
 function EmailBox({ d, gmail, copy, copied, onSent, sentInfo }) {
   const email = d.drafts.email;
-  const [to, setTo] = useState(d.emails && d.emails[0] ? d.emails[0].email : "");
-  const [subject, setSubject] = useState(email.subject);
-  const [body, setBody] = useState(email.body);
+  const [init] = useState(() => loadDraft(d.site) || {});
+  const [to, setTo] = useState(
+    init.to !== undefined ? init.to : d.emails && d.emails[0] ? d.emails[0].email : ""
+  );
+  const [subject, setSubject] = useState(init.subject !== undefined ? init.subject : email.subject);
+  const [body, setBody] = useState(init.body !== undefined ? init.body : email.body);
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("plyde_draft_" + d.site, JSON.stringify({ to, subject, body }));
+    } catch {}
+  }, [to, subject, body, d.site]);
 
   async function send() {
     setMsg("");
@@ -152,4 +169,4 @@ export default function Drafts({ d, copy, copied, gmail, onSent, sentInfo }) {
       })}
     </div>
   );
-}
+            }
