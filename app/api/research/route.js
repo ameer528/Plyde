@@ -1,8 +1,4 @@
-const MODELS = [
-  "gemini-3.5-flash-lite",
-  "gemini-3.8-flash",
-  "gemini-flash-latest",
-];
+import { askAI } from "../../ai";
 
 function cleanUrl(input) {
   let value = String(input || "").trim();
@@ -172,12 +168,20 @@ Below is text from the website of a possible prospect (${host}). Use ONLY this t
 
 ${siteText}
 
+First judge the company's stage from the text only:
+- "early": looks young (recently launched, beta, waitlist, early access, small team, pre-seed or seed, founded within about the last 2 years, or very thin content).
+- "growing": has real customers or traction but still looks small or mid-size.
+- "established": looks mature, large or well known (many products, enterprise customers, large team, long history, big funding).
+If unsure, use "growing".
+
 Write outreach drafts for these channels: ${channels.join(", ")}.
 Rules for the drafts: natural and human, no hype, no flattery, no fake claims. Mention one specific, real detail from their site. Never say you used their product or saw anything not in the text above. Do not invent facts about the user beyond what is stated above. Use [First name] for the recipient and sign off with [Your name]. End with one low-pressure question.
 Length limits: email under 110 words; x under 270 characters; linkedin under 70 words; instagram, tiktok, facebook and youtube under 45 words.
 
 Return ONLY valid JSON in exactly this shape (include only the requested channels inside drafts; email is an object, every other channel is a string):
 {
+  "stage": "early, growing or established",
+  "stage_evidence": "a short phrase from the text that supports the stage, or 'unclear'",
   "company_summary": "1-2 sentences on what this company does, only from the text",
   "fit_score": 0-100,
   "fit_reason": "1-2 sentences on why they might need the user's service",
@@ -187,39 +191,6 @@ Return ONLY valid JSON in exactly this shape (include only the requested channel
     "email": { "subject": "short subject", "body": "the email" }
   }
 }`;
-}
-
-async function askGemini(prompt) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return { error: "The AI key is missing on the server." };
-  let lastStatus = 0;
-  for (const model of MODELS) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" },
-          }),
-        }
-      );
-      lastStatus = res.status;
-      if (!res.ok) continue;
-      const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      const clean = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
-      return { result: JSON.parse(clean) };
-    } catch {
-      continue;
-    }
-  }
-  if (lastStatus === 429) {
-    return { error: "The free AI limit was reached. Wait a few minutes and try again." };
-  }
-  return { error: "The AI could not answer right now." };
 }
 
 export async function POST(request) {
@@ -281,7 +252,7 @@ export async function POST(request) {
 
   const channels = ["email", ...Object.keys(socials)];
   const siteText = `Title: ${home.title}\nDescription: ${home.desc}\nPage text: ${home.body.slice(0, 4500)}\nContact page text: ${contactText}`;
-  const answer = await askGemini(buildPrompt(url.hostname, profile, siteText, channels));
+  const answer = await askAI(buildPrompt(url.hostname, profile, siteText, channels));
   if (answer.error) {
     return Response.json({ error: answer.error }, { status: 502 });
   }
@@ -301,9 +272,13 @@ export async function POST(request) {
     }
   }
 
+  const stage = ["early", "growing", "established"].includes(r.stage) ? r.stage : "growing";
+
   return Response.json({
     site: url.hostname,
     url: url.toString(),
+    stage,
+    stage_evidence: String(r.stage_evidence || "unclear").slice(0, 200),
     company_summary: r.company_summary || "",
     fit_score: Math.max(0, Math.min(100, Number(r.fit_score) || 0)),
     fit_reason: r.fit_reason || "",
@@ -314,4 +289,4 @@ export async function POST(request) {
     contact_page: contactPage,
     drafts,
   });
-   }
+                 }
