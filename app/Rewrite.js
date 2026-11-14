@@ -2,44 +2,67 @@
 
 import { useState, useEffect } from "react";
 
-const FROM = "businesses";
-const TO = "clients";
+const WORDS = ["businesses", "clients"];
+const HOLD = 2800;
+const ERASE = 45;
+const TYPE = 75;
+const GAP = 150;
 
 export default function Rewrite() {
-  const [text, setText] = useState(FROM);
+  const [text, setText] = useState(WORDS[0]);
   const [working, setWorking] = useState(false);
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setText(TO);
-      return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    let timer;
+    let cancelled = false;
+    let index = 0;
+
+    function wait(ms) {
+      return new Promise((resolve) => {
+        timer = setTimeout(resolve, ms);
+      });
     }
-    const timers = [];
-    let t = 2800;
-    for (let i = FROM.length - 1; i >= 0; i--) {
-      const next = FROM.slice(0, i);
-      timers.push(
-        setTimeout(() => {
-          setWorking(true);
-          setText(next);
-        }, t)
-      );
-      t += 45;
+
+    async function loop() {
+      while (!cancelled) {
+        await wait(HOLD);
+        if (cancelled) return;
+        const current = WORDS[index];
+        const next = WORDS[(index + 1) % WORDS.length];
+
+        setWorking(true);
+        for (let i = current.length - 1; i >= 0; i--) {
+          setText(current.slice(0, i));
+          await wait(ERASE);
+          if (cancelled) return;
+        }
+        await wait(GAP);
+        for (let i = 1; i <= next.length; i++) {
+          setText(next.slice(0, i));
+          await wait(TYPE);
+          if (cancelled) return;
+        }
+        index = (index + 1) % WORDS.length;
+        setWorking(false);
+      }
     }
-    t += 150;
-    for (let i = 1; i <= TO.length; i++) {
-      const next = TO.slice(0, i);
-      timers.push(setTimeout(() => setText(next), t));
-      t += 75;
-    }
-    timers.push(setTimeout(() => setWorking(false), t + 400));
-    return () => timers.forEach(clearTimeout);
+
+    loop();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   return (
-    <span>
-      {text}
-      <span className={"caret" + (working ? " on" : "")} aria-hidden="true" />
-    </span>
+    <>
+      <span aria-hidden="true">
+        {text}
+        <span className={"caret" + (working ? " on" : "")} />
+      </span>
+      <span className="sr">businesses</span>
+    </>
   );
 }
