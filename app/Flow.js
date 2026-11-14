@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const card = {
   background: "#1E293B",
@@ -28,6 +28,19 @@ const ghost = {
   background: "transparent",
   color: "#F8FAFC",
   fontSize: "14px",
+  cursor: "pointer",
+  textDecoration: "none",
+  display: "inline-block",
+};
+
+const solid = {
+  padding: "10px 16px",
+  borderRadius: "10px",
+  border: "none",
+  background: "linear-gradient(135deg, #7C3AED, #0EA5E9)",
+  color: "#F8FAFC",
+  fontSize: "14px",
+  fontWeight: 600,
   cursor: "pointer",
   textDecoration: "none",
   display: "inline-block",
@@ -74,41 +87,115 @@ async function post(path, body) {
   }
 }
 
-function Drafts({ d, copy, copied }) {
-  const drafts = d.drafts || {};
-  const email = drafts.email;
-  const firstEmail = d.emails && d.emails[0] ? d.emails[0].email : "";
-  const gmail = email
-    ? `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(firstEmail)}&su=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(email.body)}`
-    : "";
+function EmailBox({ d, gmail, copy, copied, onSent, sentInfo }) {
+  const email = d.drafts.email;
+  const [to, setTo] = useState(d.emails && d.emails[0] ? d.emails[0].email : "");
+  const [subject, setSubject] = useState(email.subject);
+  const [body, setBody] = useState(email.body);
+  const [sending, setSending] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function send() {
+    setMsg("");
+    if (!to.trim()) {
+      setMsg("Add the recipient's email first.");
+      return;
+    }
+    if (/\[[^\]]+\]/.test(subject + " " + body)) {
+      setMsg("Replace the [placeholders], like [First name] and [Your name], before sending.");
+      return;
+    }
+    const ok = window.confirm(
+      `Send this email to ${to.trim()} from ${gmail.email || "your Gmail"}?`
+    );
+    if (!ok) return;
+    setSending(true);
+    const r = await post("/api/gmail/send", {
+      to: to.trim(),
+      subject,
+      body,
+      approved: true,
+    });
+    setSending(false);
+    if (r.ok) {
+      setMsg("Sent.");
+      onSent(d.site, to.trim(), subject);
+    } else {
+      setMsg(r.json.error || "Could not send.");
+      if (r.json.reconnect) gmail.refresh();
+    }
+  }
 
   return (
-    <div>
-      {email && (
-        <details style={{ marginBottom: "8px" }}>
-          <summary style={{ cursor: "pointer", fontWeight: 600 }}>Email draft</summary>
-          <p style={{ margin: "10px 0 4px", fontWeight: 600 }}>Subject: {email.subject}</p>
-          <p style={{ margin: "0 0 10px", color: "#CBD5E1", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-            {email.body}
-          </p>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <button
-              style={ghost}
-              onClick={() => copy(d.site + "-email", `Subject: ${email.subject}\n\n${email.body}`)}
-            >
-              {copied === d.site + "-email" ? "Copied" : "Copy"}
+    <details open style={{ marginBottom: "8px" }}>
+      <summary style={{ cursor: "pointer", fontWeight: 600 }}>Email draft</summary>
+      <div style={{ marginTop: "10px" }}>
+        <label style={{ color: "#94A3B8", fontSize: "13px" }}>To</label>
+        <input
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          placeholder="Recipient email (no public email was found)"
+          style={{ ...field, width: "100%", boxSizing: "border-box", padding: "10px", margin: "4px 0 10px" }}
+        />
+        <label style={{ color: "#94A3B8", fontSize: "13px" }}>Subject</label>
+        <input
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          style={{ ...field, width: "100%", boxSizing: "border-box", padding: "10px", margin: "4px 0 10px" }}
+        />
+        <label style={{ color: "#94A3B8", fontSize: "13px" }}>Message</label>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={9}
+          style={{ ...field, width: "100%", boxSizing: "border-box", padding: "10px", margin: "4px 0 10px", lineHeight: 1.5 }}
+        />
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+          {gmail.connected ? (
+            <button style={{ ...solid, opacity: sending ? 0.6 : 1 }} disabled={sending} onClick={send}>
+              {sending ? "Sending..." : "Send"}
             </button>
-            {firstEmail ? (
-              <a href={gmail} target="_blank" rel="noreferrer" style={ghost}>
-                Open in Gmail
-              </a>
-            ) : (
-              <span style={{ color: "#94A3B8", fontSize: "13px", alignSelf: "center" }}>
-                No public email found, so use their contact page.
-              </span>
-            )}
-          </div>
-        </details>
+          ) : (
+            <a href="/api/gmail/connect" style={solid}>
+              Connect Gmail to send
+            </a>
+          )}
+          <button style={ghost} onClick={() => copy(d.site + "-email", `Subject: ${subject}\n\n${body}`)}>
+            {copied === d.site + "-email" ? "Copied" : "Copy"}
+          </button>
+          <a
+            href={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`}
+            target="_blank"
+            rel="noreferrer"
+            style={ghost}
+          >
+            Open in Gmail
+          </a>
+        </div>
+        {msg && (
+          <p style={{ margin: "10px 0 0", color: msg === "Sent." ? "#10B981" : "#F59E0B", fontSize: "14px" }}>
+            {msg}
+          </p>
+        )}
+        {sentInfo && msg !== "Sent." && (
+          <p style={{ margin: "10px 0 0", color: "#94A3B8", fontSize: "13px" }}>
+            You already emailed {sentInfo.to} on {new Date(sentInfo.at).toLocaleDateString()}.
+          </p>
+        )}
+        <p style={{ margin: "10px 0 0", color: "#64748B", fontSize: "12px" }}>
+          An opt-out line is added to every email automatically. Limit: 20 emails per day.
+        </p>
+      </div>
+    </details>
+  );
+}
+
+function Drafts({ d, copy, copied, gmail, onSent, sentInfo }) {
+  const drafts = d.drafts || {};
+  return (
+    <div>
+      {drafts.email && (
+        <EmailBox d={d} gmail={gmail} copy={copy} copied={copied} onSent={onSent} sentInfo={sentInfo} />
       )}
       {Object.keys(LABELS).map((key) => {
         if (!drafts[key] || !d.socials || !d.socials[key]) return null;
@@ -143,12 +230,60 @@ export default function Flow() {
   const [dropped, setDropped] = useState(0);
   const [copied, setCopied] = useState("");
   const [ready, setReady] = useState(false);
+  const [gmail, setGmail] = useState({ connected: false, email: "", loaded: false });
+  const [banner, setBanner] = useState("");
+  const [sentLog, setSentLog] = useState([]);
 
   const ctx = useRef(null);
   const queue = useRef([]);
   const seen = useRef(new Set());
 
   const canRun = website.trim() || description.trim();
+
+  async function refreshGmail() {
+    try {
+      const res = await fetch("/api/gmail/status");
+      const j = await res.json();
+      setGmail({ connected: !!j.connected, email: j.email || "", loaded: true });
+    } catch {
+      setGmail((g) => ({ ...g, loaded: true }));
+    }
+  }
+
+  useEffect(() => {
+    refreshGmail();
+    try {
+      setSentLog(JSON.parse(localStorage.getItem("plyde_sent_log") || "[]"));
+    } catch {}
+    const q = new URLSearchParams(window.location.search).get("gmail");
+    if (q) {
+      const texts = {
+        connected: "Gmail connected. You can now send emails you approve, straight from Plyde.",
+        denied: "Gmail was not connected. You can try again any time.",
+        failed: "Something went wrong connecting Gmail. Please try again.",
+      };
+      setBanner(texts[q] || "");
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
+
+  async function disconnectGmail() {
+    try {
+      await fetch("/api/gmail/status", { method: "DELETE" });
+    } catch {}
+    refreshGmail();
+  }
+
+  function onSent(site, to, subject) {
+    const entry = { site, to, subject, at: Date.now() };
+    setSentLog((prev) => {
+      const next = [entry, ...prev].slice(0, 200);
+      try {
+        localStorage.setItem("plyde_sent_log", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }
 
   async function copy(key, text, openUrl) {
     try {
@@ -261,6 +396,22 @@ export default function Flow() {
 
   return (
     <div style={{ maxWidth: "560px", margin: "0 auto", textAlign: "left" }}>
+      {banner && (
+        <p
+          style={{
+            background: "#1E293B",
+            border: "1px solid #334155",
+            borderRadius: "12px",
+            padding: "12px",
+            color: "#CBD5E1",
+            fontSize: "14px",
+            textAlign: "center",
+          }}
+        >
+          {banner}
+        </p>
+      )}
+
       <form onSubmit={run}>
         <div style={{ display: "flex", gap: "8px" }}>
           <input
@@ -305,6 +456,23 @@ export default function Flow() {
           />
         )}
       </form>
+
+      {gmail.loaded && (
+        <p style={{ color: "#94A3B8", fontSize: "13px", textAlign: "center", marginTop: "14px" }}>
+          {gmail.connected ? (
+            <>
+              Gmail connected{gmail.email ? `: ${gmail.email}` : ""}.{" "}
+              <span onClick={disconnectGmail} style={{ textDecoration: "underline", cursor: "pointer" }}>
+                Disconnect
+              </span>
+            </>
+          ) : (
+            <a href="/api/gmail/connect" style={{ color: "#0EA5E9" }}>
+              Connect Gmail to send emails from Plyde
+            </a>
+          )}
+        </p>
+      )}
 
       {step && <p style={{ color: "#94A3B8", textAlign: "center", marginTop: "20px" }}>{step}</p>}
       {error && <p style={{ color: "#F59E0B", textAlign: "center", marginTop: "20px" }}>{error}</p>}
@@ -420,36 +588,6 @@ export default function Flow() {
                 )}
               </div>
 
-              <Drafts d={d} copy={copy} copied={copied} />
-            </div>
-          ))}
-
-          {ready && !busy && (
-            <button
-              onClick={fillBatch}
-              style={{
-                width: "100%",
-                padding: "14px",
-                borderRadius: "12px",
-                border: "none",
-                background: "linear-gradient(135deg, #7C3AED, #0EA5E9)",
-                color: "#F8FAFC",
-                fontWeight: 600,
-                fontSize: "16px",
-                marginBottom: "12px",
-              }}
-            >
-              Find 5 more
-            </button>
-          )}
-
-          <p style={{ textAlign: "center", color: "#64748B", fontSize: "13px" }}>
-            {unreadable > 0 ? `${unreadable} site(s) could not be read. ` : ""}
-            {dropped > 0 ? `${dropped} established company(ies) were left out. ` : ""}
-            Stages, scores and drafts are AI-written from public websites. Review everything before you send.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-              }
+              <Drafts
+                d={d}
+             
