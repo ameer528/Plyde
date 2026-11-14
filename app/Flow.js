@@ -19,6 +19,7 @@ export default function Flow() {
   const [cards, setCards] = useState([]);
   const [unreadable, setUnreadable] = useState(0);
   const [dropped, setDropped] = useState(0);
+  const [offTarget, setOffTarget] = useState(0);
   const [copied, setCopied] = useState("");
   const [ready, setReady] = useState(false);
   const [restored, setRestored] = useState(false);
@@ -55,6 +56,7 @@ export default function Flow() {
         setCards(s.cards || []);
         setUnreadable(s.unreadable || 0);
         setDropped(s.dropped || 0);
+        setOffTarget(s.offTarget || 0);
         setWebsite(s.website || "");
         setDescription(s.description || "");
         if (s.ctx) {
@@ -89,6 +91,7 @@ export default function Flow() {
           cards,
           unreadable,
           dropped,
+          offTarget,
           website,
           description,
           ctx: ctx.current,
@@ -97,7 +100,7 @@ export default function Flow() {
         })
       );
     } catch {}
-  }, [restored, profile, market, cards, unreadable, dropped, ready]);
+  }, [restored, profile, market, cards, unreadable, dropped, offTarget, ready]);
 
   async function disconnectGmail() {
     try {
@@ -167,7 +170,9 @@ export default function Flow() {
         profile: { summary: c.summary, target: c.target, edge: c.edge },
       });
       if (r.ok) {
-        if (r.json.stage === "established") {
+        if (r.json.relationship && r.json.relationship !== "prospect") {
+          setOffTarget((n) => n + 1);
+        } else if (r.json.stage === "established") {
           setDropped((n) => n + 1);
         } else {
           kept++;
@@ -182,7 +187,7 @@ export default function Flow() {
     setStep("");
     setBusy(false);
     if (kept === 0) {
-      setError("No new early-stage companies could be researched this time. Try again in a moment.");
+      setError("No new early-stage buyers could be found this time. Try again in a moment.");
     } else if (kept < 5) {
       setError(`Found ${kept} new companies this time. Try again for more.`);
     }
@@ -196,6 +201,7 @@ export default function Flow() {
     setCards([]);
     setUnreadable(0);
     setDropped(0);
+    setOffTarget(0);
     setReady(false);
     queue.current = [];
     seen.current = new Set();
@@ -219,6 +225,11 @@ export default function Flow() {
     if (m.ok) {
       setMarket(m.json);
       edge = (m.json.differentiators || []).join("; ");
+      (m.json.competitors || []).forEach((c) => {
+        try {
+          seen.current.add(new URL(c.url).hostname.replace(/^www\./, ""));
+        } catch {}
+      });
     }
 
     ctx.current = { summary, target, edge, ownHost };
@@ -382,8 +393,9 @@ export default function Flow() {
                   </button>
                 )}
                 <p className="fine">
-                  {unreadable > 0 ? `${unreadable} site(s) could not be read. ` : ""}
-                  {dropped > 0 ? `${dropped} established company(ies) were left out.` : ""}
+                  {offTarget > 0 ? `${offTarget} competitor(s) or poor fits were left out. ` : ""}
+                  {dropped > 0 ? `${dropped} established company(ies) were left out. ` : ""}
+                  {unreadable > 0 ? `${unreadable} site(s) could not be read.` : ""}
                 </p>
               </>
             )}
@@ -403,4 +415,4 @@ export default function Flow() {
       )}
     </>
   );
-                  }
+            }
