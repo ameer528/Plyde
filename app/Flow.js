@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 const card = {
   background: "#1E293B",
@@ -42,10 +42,19 @@ const LABELS = {
   youtube: "YouTube",
 };
 
+const STAGES = {
+  early: "Early stage",
+  growing: "Growing",
+};
+
 function scoreColor(score) {
   if (score >= 75) return "#10B981";
   if (score >= 50) return "#F59E0B";
   return "#EF4444";
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 async function post(path, body) {
@@ -130,8 +139,14 @@ export default function Flow() {
   const [profile, setProfile] = useState(null);
   const [market, setMarket] = useState(null);
   const [cards, setCards] = useState([]);
-  const [skipped, setSkipped] = useState(0);
+  const [unreadable, setUnreadable] = useState(0);
+  const [dropped, setDropped] = useState(0);
   const [copied, setCopied] = useState("");
+  const [ready, setReady] = useState(false);
+
+  const ctx = useRef(null);
+  const queue = useRef([]);
+  const seen = useRef(new Set());
 
   const canRun = website.trim() || description.trim();
 
@@ -150,13 +165,73 @@ export default function Flow() {
     setBusy(false);
   }
 
+  async function fillBatch() {
+    const c = ctx.current;
+    setError("");
+    setBusy(true);
+    let kept = 0;
+    let searches = 0;
+
+    while (kept < 5) {
+      if (queue.current.length === 0) {
+        if (searches >= 3) break;
+        searches++;
+        setStep("Searching for more companies...");
+        const d = await post("/api/discover", {
+          profile: { summary: c.summary, target: c.target },
+        });
+        if (!d.ok) {
+          if (kept === 0 && searches === 1) return stop(d.json.error || "Search failed.");
+          break;
+        }
+        for (const s of d.json.sites || []) {
+          const h = s.host.replace(/^www\./, "");
+          if (h === c.ownHost || seen.current.has(h)) continue;
+          seen.current.add(h);
+          queue.current.push(s);
+        }
+        if (queue.current.length === 0) continue;
+      }
+
+      const site = queue.current.shift();
+      setStep(`Researching ${site.host}... (${kept} of 5 found)`);
+      const r = await post("/api/research", {
+        website: site.url,
+        profile: { summary: c.summary, target: c.target, edge: c.edge },
+      });
+      if (r.ok) {
+        if (r.json.stage === "established") {
+          setDropped((n) => n + 1);
+        } else {
+          kept++;
+          setCards((prev) => [...prev, r.json]);
+        }
+      } else {
+        setUnreadable((n) => n + 1);
+      }
+      await sleep(2500);
+    }
+
+    setStep("");
+    setBusy(false);
+    if (kept === 0) {
+      setError("No new early-stage companies could be researched this time. Try again in a moment.");
+    } else if (kept < 5) {
+      setError(`Found ${kept} new companies this time. Try again for more.`);
+    }
+  }
+
   async function run(e) {
     e.preventDefault();
     setError("");
     setProfile(null);
     setMarket(null);
     setCards([]);
-    setSkipped(0);
+    setUnreadable(0);
+    setDropped(0);
+    setReady(false);
+    queue.current = [];
+    seen.current = new Set();
     setBusy(true);
 
     setStep("Reading your website...");
@@ -168,9 +243,6 @@ export default function Flow() {
     const prof = a.json.result;
     const ownHost = a.json.site === "this business" ? "" : a.json.site.replace(/^www\./, "");
     setProfile(prof);
-    try {
-      localStorage.setItem("plyde_profile", JSON.stringify(prof));
-    } catch {}
     const summary = prof.business_summary || "";
     const target = prof.segments && prof.segments[0] ? prof.segments[0].name : "";
 
@@ -182,33 +254,9 @@ export default function Flow() {
       edge = (m.json.differentiators || []).join("; ");
     }
 
-    setStep("Finding companies that need your service...");
-    const d = await post("/api/discover", { profile: { summary, target } });
-    if (!d.ok) return stop(d.json.error || "Search failed.");
-    const sites = (d.json.sites || [])
-      .filter((s) => s.host.replace(/^www\./, "") !== ownHost)
-      .slice(0, 5);
-
-    const found = [];
-    let failed = 0;
-    for (let i = 0; i < sites.length; i++) {
-      setStep(`Researching ${sites[i].host} (${i + 1} of ${sites.length})...`);
-      const r = await post("/api/research", {
-        website: sites[i].url,
-        profile: { summary, target, edge },
-      });
-      if (r.ok) {
-        found.push(r.json);
-        setCards([...found].sort((x, y) => y.fit_score - x.fit_score));
-      } else {
-        failed++;
-        setSkipped(failed);
-      }
-      if (i < sites.length - 1) await new Promise((res) => setTimeout(res, 1500));
-    }
-    setStep("");
-    setBusy(false);
-    if (!found.length) setError("None of the companies found could be researched. Please try again.");
+    ctx.current = { summary, target, edge, ownHost };
+    setReady(true);
+    await fillBatch();
   }
 
   return (
@@ -309,7 +357,7 @@ export default function Flow() {
 
       {cards.length > 0 && (
         <div style={{ marginTop: "8px" }}>
-          <h3 style={{ textAlign: "center" }}>Companies that may need you</h3>
+          <h3 style={{ textAlign: "center" }}>Early companies that may need you</h3>
           {cards.map((d) => (
             <div key={d.site} style={card}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}>
@@ -327,6 +375,9 @@ export default function Flow() {
                   {d.fit_score}%
                 </span>
               </div>
+              <p style={{ margin: "6px 0 0", color: "#94A3B8", fontSize: "13px" }}>
+                {STAGES[d.stage] || "Growing"} (AI guess: {d.stage_evidence})
+              </p>
               <p style={{ color: "#CBD5E1", margin: "10px 0 6px", lineHeight: 1.5 }}>{d.company_summary}</p>
               <p style={{ color: "#94A3B8", margin: "0 0 6px", fontSize: "14px", lineHeight: 1.5 }}>
                 <strong style={{ color: "#CBD5E1" }}>Why they might need you: </strong>
@@ -372,12 +423,33 @@ export default function Flow() {
               <Drafts d={d} copy={copy} copied={copied} />
             </div>
           ))}
+
+          {ready && !busy && (
+            <button
+              onClick={fillBatch}
+              style={{
+                width: "100%",
+                padding: "14px",
+                borderRadius: "12px",
+                border: "none",
+                background: "linear-gradient(135deg, #7C3AED, #0EA5E9)",
+                color: "#F8FAFC",
+                fontWeight: 600,
+                fontSize: "16px",
+                marginBottom: "12px",
+              }}
+            >
+              Find 5 more
+            </button>
+          )}
+
           <p style={{ textAlign: "center", color: "#64748B", fontSize: "13px" }}>
-            {skipped > 0 ? `${skipped} site(s) could not be read and were skipped. ` : ""}
-            Scores and drafts are AI-written from public websites. Review everything before you send.
+            {unreadable > 0 ? `${unreadable} site(s) could not be read. ` : ""}
+            {dropped > 0 ? `${dropped} established company(ies) were left out. ` : ""}
+            Stages, scores and drafts are AI-written from public websites. Review everything before you send.
           </p>
         </div>
       )}
     </div>
   );
-    }
+              }
