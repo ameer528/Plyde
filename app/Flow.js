@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { sleep, post } from "./ui";
 import Company from "./Company";
+import Rewrite from "./Rewrite";
 import markImg from "./mark-white.png";
 import wordImg from "./word-white.png";
 
@@ -249,7 +250,9 @@ export default function Flow() {
       </header>
 
       <section className="hero">
-        <h1>Find the businesses that need you before anyone else does.</h1>
+        <h1>
+          Find the <Rewrite /> that need you before anyone else does.
+        </h1>
         <p className="lead">
           Enter your website. Plyde researches your market, finds companies that are still early,
           and drafts the outreach. You approve every message.
@@ -400,4 +403,4 @@ export default function Flow() {
       )}
     </>
   );
-    }
+                  }
