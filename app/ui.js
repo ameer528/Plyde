@@ -1,47 +1,3 @@
-export const card = {
-  background: "#1E293B",
-  border: "1px solid #334155",
-  borderRadius: "16px",
-  padding: "18px",
-  marginBottom: "14px",
-  textAlign: "left",
-};
-
-export const field = {
-  padding: "14px",
-  borderRadius: "12px",
-  border: "1px solid #334155",
-  background: "#1E293B",
-  color: "#F8FAFC",
-  fontSize: "16px",
-  fontFamily: "inherit",
-};
-
-export const ghost = {
-  padding: "8px 14px",
-  borderRadius: "10px",
-  border: "1px solid #334155",
-  background: "transparent",
-  color: "#F8FAFC",
-  fontSize: "14px",
-  cursor: "pointer",
-  textDecoration: "none",
-  display: "inline-block",
-};
-
-export const solid = {
-  padding: "10px 16px",
-  borderRadius: "10px",
-  border: "none",
-  background: "linear-gradient(135deg, #7C3AED, #0EA5E9)",
-  color: "#F8FAFC",
-  fontSize: "14px",
-  fontWeight: 600,
-  cursor: "pointer",
-  textDecoration: "none",
-  display: "inline-block",
-};
-
 export const LABELS = {
   x: "X",
   linkedin: "LinkedIn",
@@ -56,10 +12,21 @@ export const STAGES = {
   growing: "Growing",
 };
 
-export function scoreColor(score) {
-  if (score >= 75) return "#10B981";
-  if (score >= 50) return "#F59E0B";
-  return "#EF4444";
+export function socialLabel(key, url) {
+  try {
+    const parts = new URL(url).pathname.split("/").filter(Boolean);
+    const first = (parts[0] || "").replace(/^@/, "");
+    if (key === "x" || key === "instagram" || key === "tiktok") {
+      return first ? "@" + first : LABELS[key];
+    }
+    if (key === "linkedin") return parts[1] || parts[0] || LABELS[key];
+    if (key === "youtube") {
+      return (parts[0] || "").startsWith("@") ? parts[0] : parts[1] || parts[0] || LABELS[key];
+    }
+    return parts[0] || LABELS[key];
+  } catch {
+    return LABELS[key];
+  }
 }
 
 export function sleep(ms) {
@@ -81,4 +48,4 @@ export async function post(path, body) {
   } catch {
     return { ok: false, json: { error: "Network problem. Please try again." } };
   }
-    }
+}
