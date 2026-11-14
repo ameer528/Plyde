@@ -8,6 +8,15 @@ const ERASE = 45;
 const TYPE = 75;
 const GAP = 150;
 
+const hidden = {
+  position: "absolute",
+  width: "1px",
+  height: "1px",
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+};
+
 export default function Rewrite() {
   const [text, setText] = useState(WORDS[0]);
   const [working, setWorking] = useState(false);
@@ -62,7 +71,7 @@ export default function Rewrite() {
         {text}
         <span className={"caret" + (working ? " on" : "")} />
       </span>
-      <span className="sr">businesses</span>
+      <span style={hidden}>businesses</span>
     </>
   );
 }
