@@ -94,12 +94,12 @@ function findEmails(html, source, into) {
   }
 }
 
-function findContactPage(html, baseUrl) {
+function findPage(html, baseUrl, hrefPattern, labelPattern) {
   const links = html.matchAll(/<a[^>]+href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi);
   for (const m of links) {
     const href = m[1];
-    const label = m[2].replace(/<[^>]+>/g, " ");
-    if (/contact/i.test(href) || /contact/i.test(label)) {
+    const label = m[2].replace(/<[^>]+>/g, " ").trim();
+    if (hrefPattern.test(href) || labelPattern.test(label)) {
       try {
         const u = new URL(href, baseUrl);
         if (
@@ -130,34 +130,83 @@ const BLOCKED_FIRST = [
   "help", "about", "settings", "tos", "ads",
 ];
 
+function addSocial(raw, baseUrl, into) {
+  let u;
+  try {
+    u = new URL(raw, baseUrl);
+  } catch {
+    return;
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return;
+  const host = u.hostname.toLowerCase();
+  for (const [key, pattern] of SOCIAL_HOSTS) {
+    if (!pattern.test(host) || into[key]) continue;
+    const first = (u.pathname.split("/")[1] || "").toLowerCase();
+    if (!first || BLOCKED_FIRST.includes(first)) continue;
+    if (key === "linkedin" && !["company", "in", "school"].includes(first)) continue;
+    if (key === "tiktok" && !first.startsWith("@")) continue;
+    if (
+      key === "youtube" &&
+      !(first.startsWith("@") || ["channel", "c", "user"].includes(first))
+    )
+      continue;
+    const outHost = key === "x" ? "x.com" : host;
+    into[key] = ("https://" + outHost + u.pathname).replace(/\/$/, "");
+  }
+}
+
 function findSocials(html, baseUrl, into) {
   const links = html.matchAll(/<a[^>]+href=["']([^"']+)["']/gi);
-  for (const m of links) {
-    let u;
+  for (const m of links) addSocial(m[1], baseUrl, into);
+}
+
+function findMetaHandle(html, into) {
+  const m =
+    html.match(/<meta[^>]+name=["']twitter:site["'][^>]+content=["']@?([A-Za-z0-9_]{1,15})["']/i) ||
+    html.match(/<meta[^>]+content=["']@?([A-Za-z0-9_]{1,15})["'][^>]+name=["']twitter:site["']/i);
+  if (m && !into.x) into.x = "https://x.com/" + m[1];
+}
+
+function findJsonLd(html, baseUrl, into) {
+  const blocks = html.matchAll(
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
+  );
+  for (const m of blocks) {
+    let data;
     try {
-      u = new URL(m[1], baseUrl);
+      data = JSON.parse(m[1]);
     } catch {
       continue;
     }
-    if (u.protocol !== "https:" && u.protocol !== "http:") continue;
-    const host = u.hostname.toLowerCase();
-    for (const [key, pattern] of SOCIAL_HOSTS) {
-      if (!pattern.test(host) || into[key]) continue;
-      const first = (u.pathname.split("/")[1] || "").toLowerCase();
-      if (!first || BLOCKED_FIRST.includes(first)) continue;
-      if (key === "linkedin" && !["company", "in", "school"].includes(first)) continue;
-      if (key === "tiktok" && !first.startsWith("@")) continue;
-      if (
-        key === "youtube" &&
-        !(first.startsWith("@") || ["channel", "c", "user"].includes(first))
-      )
+    const stack = [data];
+    let guard = 0;
+    while (stack.length && guard++ < 500) {
+      const node = stack.pop();
+      if (Array.isArray(node)) {
+        for (const n of node) stack.push(n);
         continue;
-      into[key] = ("https://" + host + u.pathname).replace(/\/$/, "");
+      }
+      if (node && typeof node === "object") {
+        if (node.sameAs) {
+          const list = Array.isArray(node.sameAs) ? node.sameAs : [node.sameAs];
+          for (const u of list) if (typeof u === "string") addSocial(u, baseUrl, into);
+        }
+        for (const k of Object.keys(node)) {
+          const v = node[k];
+          if (v && typeof v === "object") stack.push(v);
+        }
+      }
     }
   }
 }
 
-function buildPrompt(host, profile, siteText, channels) {
+function collectSocials(html, baseUrl, into) {
+  findSocials(html, baseUrl, into);
+  findMetaHandle(html, into);
+  findJsonLd(html, baseUrl, into);
+}
+
+function buildPrompt(host, companyName, profile, siteText, channels) {
   return `You are a careful sales research assistant and an honest copywriter.
 
 The user sells: ${profile.summary}
@@ -168,18 +217,25 @@ Below is text from the website of a possible prospect (${host}). Use ONLY this t
 
 ${siteText}
 
-First judge the company's stage from the text only:
+Step 1. Decide how this company relates to the user:
+- "prospect": a business that runs something (a store, agency, community, service, product team) where the user's service would solve a real problem, and which does NOT sell the same kind of product or service as the user.
+- "competitor": it sells or builds the same kind of product or service as the user, or is a direct alternative to it.
+- "unrelated": no clear need for the user's service, or it is a media site, data provider, directory, tool vendor in a different field, personal blog or large platform.
+Be strict. If you are not fairly sure it is a prospect, do not say prospect.
+
+Step 2. Judge the company's stage from the text only:
 - "early": looks young (recently launched, beta, waitlist, early access, small team, pre-seed or seed, founded within about the last 2 years, or very thin content).
 - "growing": has real customers or traction but still looks small or mid-size.
 - "established": looks mature, large or well known (many products, enterprise customers, large team, long history, big funding).
 If unsure, use "growing".
 
-Write outreach drafts for these channels: ${channels.join(", ")}.
-Rules for the drafts: natural and human, no hype, no flattery, no fake claims. Mention one specific, real detail from their site. Never say you used their product or saw anything not in the text above. Do not invent facts about the user beyond what is stated above. Use [First name] for the recipient and sign off with [Your name]. End with one low-pressure question.
+Step 3. Only if the relationship is "prospect", write outreach drafts for these channels: ${channels.join(", ")}. If it is not a prospect, return "drafts": {}.
+Rules for drafts: natural and human, no hype, no flattery, no fake claims. Mention one specific, real detail from their site. Never say you used their product or saw anything not in the text above. Do not invent facts about the user beyond what is stated above. Start the email with "Hi ${companyName} team," unless the text clearly names a specific person to contact; if it does, use that first name. Sign off with [Your name]. End with one low-pressure question.
 Length limits: email under 110 words; x under 270 characters; linkedin under 70 words; instagram, tiktok, facebook and youtube under 45 words.
 
-Return ONLY valid JSON in exactly this shape (include only the requested channels inside drafts; email is an object, every other channel is a string):
+Return ONLY valid JSON in exactly this shape (email is an object, every other channel is a string):
 {
+  "relationship": "prospect, competitor or unrelated",
   "stage": "early, growing or established",
   "stage_evidence": "a short phrase from the text that supports the stage, or 'unclear'",
   "company_summary": "1-2 sentences on what this company does, only from the text",
@@ -230,16 +286,30 @@ export async function POST(request) {
   const emails = [];
   const socials = {};
   findEmails(homeHtml, url.toString(), emails);
-  findSocials(homeHtml, url.toString(), socials);
+  collectSocials(homeHtml, url.toString(), socials);
 
-  const contactPage = findContactPage(homeHtml, url.toString());
+  const contactPage = findPage(homeHtml, url.toString(), /contact/i, /contact/i);
+  const aboutPage = findPage(
+    homeHtml,
+    url.toString(),
+    /\/(about|team|company|our-story|who-we-are)(\/|$|\?)/i,
+    /^(about|about us|team|our team|company|our story)$/i
+  );
+
   let contactText = "";
   if (contactPage) {
     const contactHtml = await getHtml(contactPage);
     if (contactHtml) {
       findEmails(contactHtml, contactPage, emails);
-      findSocials(contactHtml, contactPage, socials);
+      collectSocials(contactHtml, contactPage, socials);
       contactText = textFrom(contactHtml).body.slice(0, 1500);
+    }
+  }
+  if (aboutPage && aboutPage !== contactPage) {
+    const aboutHtml = await getHtml(aboutPage);
+    if (aboutHtml) {
+      findEmails(aboutHtml, aboutPage, emails);
+      collectSocials(aboutHtml, aboutPage, socials);
     }
   }
 
@@ -250,9 +320,13 @@ export async function POST(request) {
     );
   }
 
+  const hostName = url.hostname.replace(/^www\./, "");
+  const label = hostName.split(".")[0];
+  const companyName = label.charAt(0).toUpperCase() + label.slice(1);
+
   const channels = ["email", ...Object.keys(socials)];
   const siteText = `Title: ${home.title}\nDescription: ${home.desc}\nPage text: ${home.body.slice(0, 4500)}\nContact page text: ${contactText}`;
-  const answer = await askAI(buildPrompt(url.hostname, profile, siteText, channels));
+  const answer = await askAI(buildPrompt(url.hostname, companyName, profile, siteText, channels));
   if (answer.error) {
     return Response.json({ error: answer.error }, { status: 502 });
   }
@@ -273,10 +347,14 @@ export async function POST(request) {
   }
 
   const stage = ["early", "growing", "established"].includes(r.stage) ? r.stage : "growing";
+  const relationship = ["prospect", "competitor", "unrelated"].includes(r.relationship)
+    ? r.relationship
+    : "unrelated";
 
   return Response.json({
     site: url.hostname,
     url: url.toString(),
+    relationship,
     stage,
     stage_evidence: String(r.stage_evidence || "unclear").slice(0, 200),
     company_summary: r.company_summary || "",
@@ -289,4 +367,4 @@ export async function POST(request) {
     contact_page: contactPage,
     drafts,
   });
-                 }
+      }
