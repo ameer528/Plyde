@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { card, field, sleep, post } from "./ui";
+import { sleep, post } from "./ui";
 import Company from "./Company";
+import markImg from "./mark-white.png";
+import wordImg from "./word-white.png";
 
 export default function Flow() {
   const [website, setWebsite] = useState("");
@@ -224,188 +226,178 @@ export default function Flow() {
   }
 
   return (
-    <div style={{ maxWidth: "560px", margin: "0 auto", textAlign: "left" }}>
-      {banner && (
-        <p
-          style={{
-            background: "#1E293B",
-            border: "1px solid #334155",
-            borderRadius: "12px",
-            padding: "12px",
-            color: "#CBD5E1",
-            fontSize: "14px",
-            textAlign: "center",
-          }}
-        >
-          {banner}
-        </p>
-      )}
+    <>
+      <header className="bar">
+        <div className="brand">
+          <img className="mark" src={markImg.src} alt="" />
+          <img className="word" src={wordImg.src} alt="Plyde" />
+        </div>
+        {gmail.loaded && (
+          <div className="status">
+            {gmail.connected ? (
+              <>
+                Gmail connected{gmail.email ? ": " + gmail.email : ""}{" "}
+                <button className="textbtn" onClick={disconnectGmail}>
+                  Disconnect
+                </button>
+              </>
+            ) : (
+              <a href="/api/gmail/connect">Connect Gmail</a>
+            )}
+          </div>
+        )}
+      </header>
 
-      <form onSubmit={run}>
-        <div style={{ display: "flex", gap: "8px" }}>
+      <section className="hero">
+        <h1>Find the businesses that need you before anyone else does.</h1>
+        <p className="lead">
+          Enter your website. Plyde researches your market, finds companies that are still early,
+          and drafts the outreach. You approve every message.
+        </p>
+
+        <form className="ask" onSubmit={run}>
           <input
             type="text"
-            placeholder="Your website, e.g. yourbusiness.com"
+            placeholder="yourwebsite.com"
             value={website}
             onChange={(e) => setWebsite(e.target.value)}
-            style={{ ...field, flex: 1, minWidth: 0 }}
+            aria-label="Your website"
           />
-          <button
-            type="submit"
-            disabled={busy || !canRun}
-            style={{
-              padding: "14px 20px",
-              borderRadius: "12px",
-              border: "none",
-              background: "linear-gradient(135deg, #7C3AED, #0EA5E9)",
-              color: "#F8FAFC",
-              fontWeight: 600,
-              fontSize: "16px",
-              opacity: busy || !canRun ? 0.6 : 1,
-            }}
-          >
-            {busy ? "..." : "Start"}
+          <button type="submit" disabled={busy || !canRun}>
+            {busy ? "Working" : "Start"}
           </button>
-        </div>
-        {!showDesc && (
-          <p
-            onClick={() => setShowDesc(true)}
-            style={{ color: "#94A3B8", fontSize: "14px", cursor: "pointer", textDecoration: "underline" }}
-          >
+        </form>
+
+        {!showDesc ? (
+          <button className="link" onClick={() => setShowDesc(true)}>
             No website? Describe what you sell instead
-          </p>
-        )}
-        {showDesc && (
+          </button>
+        ) : (
           <textarea
+            className="desc"
+            rows={4}
             placeholder="Describe what you sell and who you help."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            rows={4}
-            style={{ ...field, width: "100%", boxSizing: "border-box", marginTop: "12px" }}
           />
         )}
-      </form>
 
-      {gmail.loaded && (
-        <p style={{ color: "#94A3B8", fontSize: "13px", textAlign: "center", marginTop: "14px" }}>
-          {gmail.connected ? (
-            <>
-              Gmail connected{gmail.email ? `: ${gmail.email}` : ""}.{" "}
-              <span onClick={disconnectGmail} style={{ textDecoration: "underline", cursor: "pointer" }}>
-                Disconnect
-              </span>
-            </>
-          ) : (
-            <a href="/api/gmail/connect" style={{ color: "#0EA5E9" }}>
-              Connect Gmail to send emails from Plyde
-            </a>
-          )}
-        </p>
-      )}
+        {banner && <p className="banner">{banner}</p>}
+        {step && (
+          <div className="progress">
+            <p>{step}</p>
+            <div className="track">
+              <div className="fill" />
+            </div>
+          </div>
+        )}
+        {error && <p className="error">{error}</p>}
 
-      {step && <p style={{ color: "#94A3B8", textAlign: "center", marginTop: "20px" }}>{step}</p>}
-      {error && <p style={{ color: "#F59E0B", textAlign: "center", marginTop: "20px" }}>{error}</p>}
+        {!profile && !busy && (
+          <ol className="steps">
+            <li>
+              <p>Plyde reads your website and works out what you sell.</p>
+            </li>
+            <li>
+              <p>It checks your competitors and what could set you apart.</p>
+            </li>
+            <li>
+              <p>
+                It finds early-stage companies that fit, with the emails and social accounts they
+                publish.
+              </p>
+            </li>
+            <li>
+              <p>It writes outreach for each channel. You edit, approve and send.</p>
+            </li>
+          </ol>
+        )}
+      </section>
 
       {profile && (
-        <div style={{ marginTop: "28px" }}>
-          <div style={card}>
-            <h3 style={{ margin: "0 0 8px" }}>What you sell</h3>
-            <p style={{ margin: 0, color: "#CBD5E1", lineHeight: 1.5 }}>{profile.business_summary}</p>
-          </div>
-
-          {market && (
-            <div style={card}>
-              <h3 style={{ margin: "0 0 8px" }}>Your market</h3>
-              {market.competitors && market.competitors.length > 0 && (
-                <div style={{ marginBottom: "10px" }}>
-                  <strong style={{ color: "#CBD5E1" }}>Competitors found</strong>
-                  {market.competitors.map((c) => (
-                    <div key={c.url || c.name} style={{ color: "#94A3B8", fontSize: "14px", marginTop: "4px" }}>
-                      <a href={c.url} target="_blank" rel="noreferrer" style={{ color: "#0EA5E9" }}>
-                        {c.name}
-                      </a>
-                      {c.note ? ` - ${c.note}` : ""}
-                    </div>
-                  ))}
+        <section className="paper">
+          <div className="wrap">
+            <div className="panel">
+              <div className="cols">
+                <div>
+                  <h3>What you sell</h3>
+                  <p>{profile.business_summary}</p>
                 </div>
-              )}
-              {market.differentiators && market.differentiators.length > 0 && (
-                <div style={{ marginBottom: "10px" }}>
-                  <strong style={{ color: "#CBD5E1" }}>How you could stand out</strong>
-                  {market.differentiators.map((p) => (
-                    <div key={p} style={{ color: "#94A3B8", fontSize: "14px", marginTop: "4px" }}>
-                      - {p}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {market.positioning && (
-                <p style={{ margin: 0, color: "#CBD5E1", fontSize: "14px", lineHeight: 1.5 }}>
-                  {market.positioning}
-                </p>
-              )}
-              <p style={{ margin: "10px 0 0", color: "#64748B", fontSize: "12px" }}>
-                AI inference from web search results. Check it before relying on it.
-              </p>
+                {market && (
+                  <div>
+                    <h3>Your market</h3>
+                    {market.competitors && market.competitors.length > 0 && (
+                      <ul>
+                        {market.competitors.map((c) => (
+                          <li key={c.url || c.name}>
+                            <a href={c.url} target="_blank" rel="noreferrer">
+                              {c.name}
+                            </a>
+                            {c.note ? `: ${c.note}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {market.differentiators && market.differentiators.length > 0 && (
+                      <>
+                        <p>How you could stand out:</p>
+                        <ul>
+                          {market.differentiators.map((p) => (
+                            <li key={p}>{p}</li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    {market.positioning && <p>{market.positioning}</p>}
+                    <p className="fine">Based on web search results. Check it before relying on it.</p>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-        </div>
+
+            {cards.length > 0 && (
+              <>
+                <h2>Companies that may need you</h2>
+                <p className="sub">
+                  Early-stage companies, ranked by how well they fit. Scores and drafts are written
+                  by AI from public websites, so check them before you send.
+                </p>
+                {cards.map((d) => (
+                  <Company
+                    key={d.site}
+                    d={d}
+                    copy={copy}
+                    copied={copied}
+                    gmail={{ ...gmail, refresh: refreshGmail }}
+                    onSent={onSent}
+                    sentInfo={sentLog.find((x) => x.site === d.site)}
+                  />
+                ))}
+                {ready && !busy && (
+                  <button className="more" onClick={fillBatch}>
+                    Find 5 more
+                  </button>
+                )}
+                <p className="fine">
+                  {unreadable > 0 ? `${unreadable} site(s) could not be read. ` : ""}
+                  {dropped > 0 ? `${dropped} established company(ies) were left out.` : ""}
+                </p>
+              </>
+            )}
+
+            {sentLog.length > 0 && (
+              <details className="sent">
+                <summary>Sent emails ({sentLog.length})</summary>
+                {sentLog.map((s) => (
+                  <p key={s.at}>
+                    {new Date(s.at).toLocaleString()}: {s.subject} to {s.to} ({s.site})
+                  </p>
+                ))}
+              </details>
+            )}
+          </div>
+        </section>
       )}
-
-      {cards.length > 0 && (
-        <div style={{ marginTop: "8px" }}>
-          <h3 style={{ textAlign: "center" }}>Early companies that may need you</h3>
-          {cards.map((d) => (
-            <Company
-              key={d.site}
-              d={d}
-              copy={copy}
-              copied={copied}
-              gmail={{ ...gmail, refresh: refreshGmail }}
-              onSent={onSent}
-              sentInfo={sentLog.find((x) => x.site === d.site)}
-            />
-          ))}
-
-          {ready && !busy && (
-            <button
-              onClick={fillBatch}
-              style={{
-                width: "100%",
-                padding: "14px",
-                borderRadius: "12px",
-                border: "none",
-                background: "linear-gradient(135deg, #7C3AED, #0EA5E9)",
-                color: "#F8FAFC",
-                fontWeight: 600,
-                fontSize: "16px",
-                marginBottom: "12px",
-              }}
-            >
-              Find 5 more
-            </button>
-          )}
-
-          <p style={{ textAlign: "center", color: "#64748B", fontSize: "13px" }}>
-            {unreadable > 0 ? `${unreadable} site(s) could not be read. ` : ""}
-            {dropped > 0 ? `${dropped} established company(ies) were left out. ` : ""}
-            Stages, scores and drafts are AI-written from public websites. Review everything before you send.
-          </p>
-        </div>
-      )}
-
-      {sentLog.length > 0 && (
-        <details style={{ marginTop: "20px" }}>
-          <summary style={{ cursor: "pointer", color: "#CBD5E1", fontWeight: 600 }}>
-            Sent emails ({sentLog.length})
-          </summary>
-          {sentLog.map((s) => (
-            <p key={s.at} style={{ color: "#94A3B8", fontSize: "13px", margin: "8px 0" }}>
-              {new Date(s.at).toLocaleString()}: {s.subject} to {s.to} ({s.site})
-            </p>
-          ))}
-        </details>
-      )}
-    </div>
+    </>
   );
-      }
+    }
