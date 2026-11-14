@@ -1,8 +1,4 @@
-const MODELS = [
-  "gemini-3.5-flash-lite",
-  "gemini-3.8-flash",
-  "gemini-flash-latest",
-];
+import { askAI } from "../../ai";
 
 const SKIP = [
   "linkedin.com", "facebook.com", "instagram.com", "twitter.com", "x.com",
@@ -15,6 +11,15 @@ const SKIP = [
   "bloomberg.com", "reuters.com", "nytimes.com", "cnn.com", "bbc.com",
   "hubspot.com", "shopify.com", "wordpress.com", "wix.com", "blogspot.com",
   "linktr.ee", "notion.so", "discord.com", "t.me", "telegram.org",
+  "microsoft.com", "salesforce.com", "adobe.com", "oracle.com", "ibm.com",
+  "meta.com", "openai.com", "anthropic.com", "stripe.com", "slack.com",
+  "zoom.us", "dropbox.com", "atlassian.com", "zendesk.com", "mailchimp.com",
+  "wsj.com", "ft.com", "theverge.com", "wired.com", "businessinsider.com",
+  "inc.com", "entrepreneur.com", "fastcompany.com", "venturebeat.com",
+  "ycombinator.com", "angel.co", "wellfound.com", "pitchbook.com",
+  "tracxn.com", "owler.com", "zoominfo.com", "apollo.io", "similarweb.com",
+  "trustpilot.com", "softwareadvice.com", "getapp.com", "sourceforge.net",
+  "gartner.com", "mckinsey.com", "statista.com", "ycharts.com",
 ];
 
 function skipHost(host) {
@@ -22,44 +27,57 @@ function skipHost(host) {
 }
 
 async function makeQueries(profile) {
-  const fallback = [`${profile.target || "companies"} official website`];
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return fallback;
+  const t = profile.target || "business";
+  const fallback = [
+    `${t} startup just launched`,
+    `${t} early stage company beta waitlist`,
+    `new ${t} startup founded 2026`,
+  ];
 
   const prompt = `A freelancer sells this: ${profile.summary}
-They want to reach: ${profile.target || "businesses that need this service"}
+They want to reach: ${t}
 
-Write 3 different web search queries that would find the OFFICIAL WEBSITES of companies that fit this target (not articles, not lists, not directories). Make each query different in wording.
+Write 3 different web search queries that find the OFFICIAL WEBSITES of EARLY-STAGE companies that fit this target: just launched, in beta, pre-seed or seed stage, small team, roughly under 2 years old. The current year is 2026.
+Use words like "just launched", "beta", "waitlist", "early access", "seed", or "founded 2026", whichever fit the target.
+Avoid queries that return big famous companies, news articles, blog posts or lists.
 
 Return ONLY valid JSON: {"queries": ["query 1", "query 2", "query 3"]}`;
 
-  for (const model of MODELS) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" },
-          }),
-        }
-      );
-      if (!res.ok) continue;
-      const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-      const list = (parsed.queries || [])
-        .map((q) => String(q).slice(0, 200))
-        .filter(Boolean)
-        .slice(0, 3);
-      if (list.length) return list;
-    } catch {
-      continue;
-    }
+  const answer = await askAI(prompt);
+  if (answer.result && Array.isArray(answer.result.queries)) {
+    const list = answer.result.queries
+      .map((q) => String(q).slice(0, 200))
+      .filter(Boolean)
+      .slice(0, 3);
+    if (list.length) return list;
   }
   return fallback;
+}
+
+async function tavily(query, key, withDate) {
+  try {
+    const payload = {
+      query,
+      search_depth: "basic",
+      max_results: 10,
+      exclude_domains: SKIP,
+    };
+    if (withDate) payload.time_range = "year";
+    const res = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      signal: AbortSignal.timeout(15000),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) return { status: res.status, results: [] };
+    const data = await res.json();
+    return { status: 200, results: data.results || [] };
+  } catch {
+    return { status: -2, results: [] };
+  }
 }
 
 export async function POST(request) {
@@ -85,44 +103,41 @@ export async function POST(request) {
 
   const queries = await makeQueries(profile);
   const sites = [];
-  let lastStatus = 0;
+  let lastStatus = 200;
+
+  function collect(results) {
+    for (const r of results) {
+      try {
+        const u = new URL(r.url);
+        const host = u.hostname.replace(/^www\./, "").toLowerCase();
+        if (skipHost(host)) continue;
+        if (sites.some((s) => s.host === host)) continue;
+        sites.push({ host, url: u.origin, title: String(r.title || "").slice(0, 120) });
+      } catch {}
+    }
+  }
 
   for (const q of queries) {
-    try {
-      const res = await fetch("https://api.tavily.com/search", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${tkey}`,
-        },
-        body: JSON.stringify({ query: q, search_depth: "basic", max_results: 8 }),
-      });
-      lastStatus = res.status;
-      if (!res.ok) continue;
-      const data = await res.json();
-      for (const r of data.results || []) {
-        try {
-          const u = new URL(r.url);
-          const host = u.hostname.replace(/^www\./, "").toLowerCase();
-          if (skipHost(host)) continue;
-          if (sites.some((s) => s.host === host)) continue;
-          sites.push({ host, url: u.origin, title: String(r.title || "").slice(0, 120) });
-        } catch {}
-      }
-    } catch {
-      continue;
-    }
+    const out = await tavily(q, tkey, true);
+    lastStatus = out.status;
+    collect(out.results);
+  }
+
+  if (sites.length < 6) {
+    const out = await tavily(queries[0], tkey, false);
+    lastStatus = out.status;
+    collect(out.results);
   }
 
   if (!sites.length) {
     if (lastStatus === 401 || lastStatus === 403) {
       return Response.json({ error: "The search key was rejected. Check TAVILY_API_KEY in Vercel." }, { status: 502 });
     }
-    if (lastStatus === 429) {
+    if (lastStatus === 429 || lastStatus === 432 || lastStatus === 433) {
       return Response.json({ error: "The free search limit was reached. Try again later." }, { status: 502 });
     }
-    return Response.json({ error: "No companies found. Try a different customer type." }, { status: 404 });
+    return Response.json({ error: "No companies found. Try again in a moment." }, { status: 404 });
   }
 
-  return Response.json({ queries, sites: sites.slice(0, 10) });
-    }
+  return Response.json({ queries, sites: sites.slice(0, 15) });
+}
