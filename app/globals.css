@@ -172,4 +172,10 @@ details.draft[open] summary::after { content: "\2212"; }
 .more:hover { background: #2B2B2B; }
 .sent { margin-top: 36px; border-top: 1px solid var(--line); padding-top: 16px; }
 .sent summary { cursor: pointer; font-weight: 600; }
-.sent p { font-size: 13px; color: var(--mute); margin: 8px 0 0; }
+.sent p { font-size: 13px; color: var(--mute); margin: 8px 0 0; }.caret {
+  display: inline-block; width: 0.06em; height: 0.85em; margin-left: 0.05em;
+  background: var(--paper); vertical-align: -0.05em; opacity: 0;
+}
+.caret.on { opacity: 1; animation: blink 0.7s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .caret.on { animation: none; } }
