@@ -46,6 +46,8 @@ export default function CampaignRun() {
   const queue = useRef([]);
   const seen = useRef(new Set());
   const started = useRef(false);
+  const campaignRef = useRef(null);
+  const pidsRef = useRef({});
 
   function setStage(key, value) {
     setStages((s) => ({ ...s, [key]: value }));
@@ -70,6 +72,8 @@ export default function CampaignRun() {
       setUnreadable(session.unreadable || 0);
       setDropped(session.dropped || 0);
       setOffTarget(session.offTarget || 0);
+      campaignRef.current = session.campaignId || null;
+      pidsRef.current = session.pids || {};
       const st = session.stages || {};
       const fixed = {};
       Object.keys(st).forEach((k) => {
@@ -115,6 +119,8 @@ export default function CampaignRun() {
           dropped,
           offTarget,
           stages,
+          campaignId: campaignRef.current,
+          pids: pidsRef.current,
           ctx: ctx.current,
           queue: queue.current,
           seen: [...seen.current],
@@ -132,6 +138,17 @@ export default function CampaignRun() {
       } catch {}
       return next;
     });
+    const cid = campaignRef.current;
+    const pid = pidsRef.current[site];
+    if (cid && pid) {
+      post("/api/track", {
+        action: "log_activity",
+        campaignId: cid,
+        prospectId: pid,
+        kind: "sent",
+        channel: "email",
+      });
+    }
   }
 
   async function copy(key, text, openUrl) {
@@ -162,6 +179,16 @@ export default function CampaignRun() {
 
     const summary = prof.business_summary || "";
     const target = prof.segments && prof.segments[0] ? prof.segments[0].name : "";
+
+    const created = await post("/api/track", {
+      action: "create_campaign",
+      title: ownHost || (c.description || "My campaign").slice(0, 60),
+      website: c.website,
+      description: c.description,
+      summary,
+      target,
+    });
+    if (created.ok && created.json.id) campaignRef.current = created.json.id;
 
     setStage("market", "active");
     setDetail("Searching for competitors and what could set you apart...");
@@ -235,6 +262,23 @@ export default function CampaignRun() {
           setDropped((n) => n + 1);
         } else {
           kept++;
+          if (campaignRef.current) {
+            const added = await post("/api/track", {
+              action: "add_prospect",
+              campaignId: campaignRef.current,
+              prospect: {
+                site: r.json.site,
+                url: r.json.url,
+                fit_score: r.json.fit_score,
+                stage: r.json.stage,
+                company_summary: r.json.company_summary,
+                emails: r.json.emails,
+                socials: r.json.socials,
+                data: r.json,
+              },
+            });
+            if (added.ok && added.json.id) pidsRef.current[r.json.site] = added.json.id;
+          }
           setCards((prev) => [...prev, r.json]);
         }
       } else {
@@ -395,4 +439,4 @@ export default function CampaignRun() {
       )}
     </>
   );
-      }
+    }
