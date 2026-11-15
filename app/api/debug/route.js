@@ -1,3 +1,5 @@
+import { db } from "../../db";
+
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,27 @@ export async function GET(request) {
   const url = new URL(request.url);
   if (!process.env.DEBUG_KEY || url.searchParams.get("k") !== process.env.DEBUG_KEY) {
     return Response.json({ error: "not allowed" }, { status: 403 });
+  }
+
+  if (url.searchParams.get("dbtest")) {
+    const out = {
+      has_url: !!(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL),
+      has_service_key: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      has_session_secret: !!process.env.SESSION_SECRET,
+    };
+    try {
+      const supabase = db();
+      const ins = await supabase
+        .from("campaigns")
+        .insert({ owner_email: "debug@plyde.test", title: "debug" })
+        .select("id")
+        .single();
+      out.insert = ins.error ? { error: ins.error.message, code: ins.error.code } : "ok";
+      if (ins.data) await supabase.from("campaigns").delete().eq("id", ins.data.id);
+    } catch (e) {
+      out.exception = String(e && e.message ? e.message : e);
+    }
+    return Response.json(out);
   }
 
   const site = url.searchParams.get("site") || "";
@@ -74,4 +97,4 @@ export async function GET(request) {
     );
   }
   return Response.json(out);
-                                                                }
+                                                    }
