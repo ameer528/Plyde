@@ -210,18 +210,20 @@ function buildPrompt(host, companyName, profile, siteText, channels) {
   return `You are a careful sales research assistant and an honest copywriter.
 
 The user sells: ${profile.summary}
-The user wants to reach: ${profile.target || "businesses that need this service"}
+The user wants to reach (their BUYERS): ${profile.target || "businesses that need this service"}
 ${profile.edge ? "What could make the user stand out: " + profile.edge : ""}
 
 Below is text from the website of a possible prospect (${host}). Use ONLY this text for facts about the prospect. Never invent facts. If you are inferring something, use words like "possibly" or "may". Do not put contact details in your analysis.
 
 ${siteText}
 
-Step 1. Decide how this company relates to the user:
-- "prospect": a business that runs something (a store, agency, community, service, product team) where the user's service would solve a real problem, and which does NOT sell the same kind of product or service as the user.
-- "competitor": it sells or builds the same kind of product or service as the user, or is a direct alternative to it.
-- "unrelated": no clear need for the user's service, or it is a media site, data provider, directory, tool vendor in a different field, personal blog or large platform.
-Be strict. If you are not fairly sure it is a prospect, do not say prospect.
+Step 1. Decide how this company relates to the user.
+IMPORTANT: the user wants to reach businesses of this type: ${profile.target || "businesses that need this service"}. Those are the user's BUYERS. A company that matches that customer type is a PROSPECT, even if the services it offers sound similar to the customer type. Only compare the company with what the USER SELLS (the first line above), never with the customer type.
+- "prospect": it matches the customer type the user wants to reach, or would clearly buy what the user sells, and it does NOT sell the same kind of product, tool or service as the user sells.
+- "competitor": it sells the same kind of product, tool or service that THE USER sells, or is a direct alternative to it.
+- "unrelated": no clear need for what the user sells, or it is a media site, data provider, directory, tool vendor in a different field, personal blog or large platform.
+Example: if the user sells a sales tool for web developers, a web development studio is a prospect (a buyer), and another sales tool is a competitor.
+Be strict, but do not label a buyer as a competitor.
 
 Step 2. Judge the company's stage from the text only:
 - "early": looks young (recently launched, beta, waitlist, early access, small team, pre-seed or seed, founded within about the last 2 years, or very thin content).
@@ -367,4 +369,4 @@ export async function POST(request) {
     contact_page: contactPage,
     drafts,
   });
-      }
+    }
