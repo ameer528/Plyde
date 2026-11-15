@@ -82,7 +82,7 @@ function textFrom(html) {
 }
 
 const BAD_EMAIL =
-  /\.(png|jpe?g|gif|svg|webp|css|js|woff2?)$|sentry|wixpress|example\.|yourdomain|domain\.com|@2x/i;
+  /\.(png|jpe?g|gif|svg|webp|css|js|woff2?)$|sentry|wixpress|example\.|yourdomain|domain\.com|@2x|^(you|your|name|email|user|username|john|jane|test|sample|someone|yourname|first\.?last)@|@(company|domain|example|email|yourcompany|yourdomain|website|site)\./i;
 
 function findEmails(html, source, into) {
   const found =
@@ -92,6 +92,16 @@ function findEmails(html, source, into) {
     if (BAD_EMAIL.test(email)) continue;
     if (!into.some((x) => x.email === email)) into.push({ email, source });
   }
+}
+
+function displayName(title, label) {
+  const first = String(title || "")
+    .replace(/&amp;/g, "&")
+    .split(/\s[|\-\u2013\u2014:\u00b7]\s/)[0]
+    .trim();
+  const generic = /^(home|welcome|homepage|index|untitled)$/i;
+  if (first && first.length <= 40 && !generic.test(first)) return first;
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function findPage(html, baseUrl, hrefPattern, labelPattern) {
@@ -225,11 +235,11 @@ IMPORTANT: the user wants to reach businesses of this type: ${profile.target || 
 Example: if the user sells a sales tool for web developers, a web development studio is a prospect (a buyer), and another sales tool is a competitor.
 Be strict, but do not label a buyer as a competitor.
 
-Step 2. Judge the company's stage from the text only:
-- "early": looks young (recently launched, beta, waitlist, early access, small team, pre-seed or seed, founded within about the last 2 years, or very thin content).
-- "growing": has real customers or traction but still looks small or mid-size.
-- "established": looks mature, large or well known (many products, enterprise customers, large team, long history, big funding).
-If unsure, use "growing".
+Step 2. Judge the company's stage from the SIZE and maturity of the business, using the text only:
+- "early": looks young (recently launched, beta, waitlist, early access, pre-seed or seed, founded within about the last 2 years, or very thin content).
+- "growing": a small or mid-size business with real clients or traction. A solo freelancer, a freelancer with a small team, or a small agency (roughly under 25 people) belongs here no matter how many years they have been working.
+- "established": a large, well-known or well-funded company (big team, enterprise customers, many products, funding rounds, offices in several countries).
+Years of experience or a long portfolio do NOT make a small business established. If unsure, use "growing".
 
 Step 3. Only if the relationship is "prospect", write outreach drafts for these channels: ${channels.join(", ")}. If it is not a prospect, return "drafts": {}.
 Rules for drafts: natural and human, no hype, no flattery, no fake claims. Mention one specific, real detail from their site. Never say you used their product or saw anything not in the text above. Do not invent facts about the user beyond what is stated above. Start the email with "Hi ${companyName} team," unless the text clearly names a specific person to contact; if it does, use that first name. Sign off with [Your name]. End with one low-pressure question.
@@ -323,8 +333,7 @@ export async function POST(request) {
   }
 
   const hostName = url.hostname.replace(/^www\./, "");
-  const label = hostName.split(".")[0];
-  const companyName = label.charAt(0).toUpperCase() + label.slice(1);
+  const companyName = displayName(home.title, hostName.split(".")[0]);
 
   const channels = ["email", ...Object.keys(socials)];
   const siteText = `Title: ${home.title}\nDescription: ${home.desc}\nPage text: ${home.body.slice(0, 4500)}\nContact page text: ${contactText}`;
@@ -369,4 +378,4 @@ export async function POST(request) {
     contact_page: contactPage,
     drafts,
   });
-    }
+            }
