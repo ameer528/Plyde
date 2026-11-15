@@ -29,22 +29,25 @@ function skipHost(host) {
 async function makeQueries(profile) {
   const t = profile.target || "small business";
   const fallback = [
-    `${t} small business official website`,
-    `new ${t} business just launched`,
-    `${t} growing company official website`,
+    `${t} our clients book a call`,
+    `${t} case studies our services`,
+    `new ${t} just launched contact us`,
   ];
 
   const prompt = `A freelancer or small company sells this: ${profile.summary}
 Their ideal customer type: ${t}
 
-Write 3 different web search queries that find the OFFICIAL WEBSITES of small or new businesses that would BUY this. Think about what kind of business the BUYER runs (for example: an online store, an agency, a clinic, a coach, a school, a local shop, a startup in some field) and search for those buyers.
+Write 3 different web search queries that find the OFFICIAL WEBSITES of small or new businesses that would BUY this.
+
+Think about how the BUYER describes itself on its own homepage. Buyers use phrases like "our clients", "our services", "book a call", "case studies", "we help", "get a quote", "contact us". Software vendors and platforms use phrases like "pricing", "free trial", "sign up", "integrations", "API".
 
 Rules:
-- Describe the BUYER's business. Never describe the seller's own product category. Do NOT write queries that would return companies that build, sell or compete with what this freelancer sells.
-- Prefer early-stage or small buyers. Use words about the buyer's business such as "new", "just launched", "launching soon", "founded 2025" or "small team" when they fit.
+- Every query must include one or two buyer-style phrases such as "our clients", "book a call", "case studies" or "our services".
+- Describe the BUYER's business. Do NOT use words that name the seller's own product category, because those return companies that sell the same thing. Avoid words like "builder", "platform", "software", "tool", "no-code", "SaaS" unless the buyer itself would use them.
+- Prefer early-stage or small buyers. Words like "new", "boutique", "small team", "just launched" or "founded 2025" are fine when they fit.
 - Avoid queries that return big famous companies, news articles, blog posts or lists.
 - The current year is 2026.
-- Make the 3 queries clearly different from each other (different kinds of buyers or different wording).
+- Make the 3 queries clearly different from each other.
 
 Return ONLY valid JSON: {"queries": ["query 1", "query 2", "query 3"]}`;
 
@@ -85,6 +88,35 @@ async function tavily(query, key, withDate) {
   }
 }
 
+async function screen(sites, profile) {
+  if (!sites.length) return sites;
+  const list = sites
+    .map((s, i) => `${i}. ${s.host} | ${s.title} | ${s.snippet}`)
+    .join("\n");
+  const prompt = `A freelancer or small company sells this: ${profile.summary}
+They want to reach: ${profile.target || "businesses that need this"}
+
+Below are websites found by a search (number. domain | title | snippet). Label each one:
+- "buyer": a business that runs something where the seller's service would solve a real problem, and that does NOT sell the same kind of product or service as the seller.
+- "competitor": it sells or builds the same kind of product or service as the seller, or is a direct alternative to it.
+- "other": media, directory, blog, listing site, data provider, big platform, or no clear need.
+Judge only from the text given. When unsure, use "buyer".
+
+${list}
+
+Return ONLY valid JSON: {"labels": [{"i": 0, "label": "buyer"}]}`;
+
+  const answer = await askAI(prompt);
+  if (!answer.result || !Array.isArray(answer.result.labels)) return sites;
+  const drop = new Set(
+    answer.result.labels
+      .filter((l) => l.label === "competitor" || l.label === "other")
+      .map((l) => Number(l.i))
+  );
+  const kept = sites.filter((_, i) => !drop.has(i));
+  return kept.length ? kept : sites;
+}
+
 export async function POST(request) {
   let body;
   try {
@@ -117,7 +149,12 @@ export async function POST(request) {
         const host = u.hostname.replace(/^www\./, "").toLowerCase();
         if (skipHost(host)) continue;
         if (sites.some((s) => s.host === host)) continue;
-        sites.push({ host, url: u.origin, title: String(r.title || "").slice(0, 120) });
+        sites.push({
+          host,
+          url: u.origin,
+          title: String(r.title || "").slice(0, 120),
+          snippet: String(r.content || "").replace(/\s+/g, " ").slice(0, 220),
+        });
       } catch {}
     }
   }
@@ -144,5 +181,10 @@ export async function POST(request) {
     return Response.json({ error: "No companies found. Try again in a moment." }, { status: 404 });
   }
 
-  return Response.json({ queries, sites: sites.slice(0, 15) });
-}
+  const screened = await screen(sites.slice(0, 15), profile);
+  return Response.json({
+    queries,
+    screened_out: Math.min(sites.length, 15) - screened.length,
+    sites: screened.map((s) => ({ host: s.host, url: s.url, title: s.title })),
+  });
+                          }
