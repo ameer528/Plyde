@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "./Header";
 import Company from "./Company";
+import Panel from "./Panel";
+import Opportunities from "./Opportunities";
 import useGmail from "./useGmail";
 import { sleep, post } from "./ui";
 
 const STAGES = [
   { key: "read", label: "Researching your business" },
   { key: "market", label: "Analyzing your competitors" },
+  { key: "map", label: "Mapping every industry that needs your service" },
   { key: "search", label: "Finding companies that need you" },
   { key: "research", label: "Researching each company and writing outreach" },
 ];
@@ -32,6 +35,8 @@ export default function CampaignRun() {
   const [note, setNote] = useState("");
   const [profile, setProfile] = useState(null);
   const [market, setMarket] = useState(null);
+  const [opps, setOpps] = useState([]);
+  const [activeIdx, setActiveIdx] = useState(0);
   const [cards, setCards] = useState([]);
   const [unreadable, setUnreadable] = useState(0);
   const [dropped, setDropped] = useState(0);
@@ -48,9 +53,22 @@ export default function CampaignRun() {
   const started = useRef(false);
   const campaignRef = useRef(null);
   const pidsRef = useRef({});
+  const oppsRef = useRef([]);
+  const oppIdx = useRef(0);
 
   function setStage(key, value) {
     setStages((s) => ({ ...s, [key]: value }));
+  }
+
+  function targetFor(idx) {
+    const o = oppsRef.current[idx];
+    if (!o) return ctx.current ? ctx.current.target : "";
+    return (o.name + (o.phrase ? " (" + o.phrase + ")" : "")).slice(0, 280);
+  }
+
+  function industryFor(idx) {
+    const o = oppsRef.current[idx];
+    return o ? o.name : "";
   }
 
   useEffect(() => {
@@ -74,6 +92,10 @@ export default function CampaignRun() {
       setOffTarget(session.offTarget || 0);
       campaignRef.current = session.campaignId || null;
       pidsRef.current = session.pids || {};
+      oppsRef.current = session.opps || [];
+      oppIdx.current = session.oppIdx || 0;
+      setOpps(oppsRef.current);
+      setActiveIdx(oppIdx.current);
       const st = session.stages || {};
       const fixed = {};
       Object.keys(st).forEach((k) => {
@@ -119,6 +141,8 @@ export default function CampaignRun() {
           dropped,
           offTarget,
           stages,
+          opps: oppsRef.current,
+          oppIdx: oppIdx.current,
           campaignId: campaignRef.current,
           pids: pidsRef.current,
           ctx: ctx.current,
@@ -127,7 +151,7 @@ export default function CampaignRun() {
         })
       );
     } catch {}
-  }, [restored, profile, market, cards, unreadable, dropped, offTarget, stages, ready]);
+  }, [restored, profile, market, cards, unreadable, dropped, offTarget, stages, opps, activeIdx, ready]);
 
   function onSent(site, to, subject) {
     const entry = { site, to, subject, at: Date.now() };
@@ -205,44 +229,79 @@ export default function CampaignRun() {
     }
     setStage("market", "done");
 
+    setStage("map", "active");
+    setDetail("Thinking about every industry that could use your service, including ones you may not expect...");
+    const o = await post("/api/opportunities", { profile: { summary }, host: ownHost });
+    let list = o.ok && Array.isArray(o.json.opportunities) ? o.json.opportunities : [];
+    if (list.length === 0) {
+      list = (prof.segments || []).map((s) => ({
+        name: s.name,
+        buyer: "",
+        pain: s.reason || "",
+        use: "",
+        trigger: "",
+        obviousness: "obvious",
+        fit_score: Number(s.fit_score) || 0,
+        phrase: s.name,
+      }));
+    }
+    oppsRef.current = list;
+    oppIdx.current = 0;
+    setOpps(list);
+    setActiveIdx(0);
+    setStage("map", "done");
+
     ctx.current = { summary, target, edge, ownHost };
     setReady(true);
     await fillBatch();
   }
 
-  async function fillBatch() {
+  async function fillBatch(pick) {
     const c = ctx.current;
+    if (typeof pick === "number") {
+      oppIdx.current = pick;
+      setActiveIdx(pick);
+      queue.current = [];
+    }
     setError("");
     setNote("");
     setBusy(true);
     let kept = 0;
     let searches = 0;
+    let rotations = 0;
     setStage("search", "active");
-    setDetail("Searching the web for companies like your ideal customers...");
 
     while (kept < 5) {
       if (queue.current.length === 0) {
-        if (searches >= 3) break;
+        if (searches >= 2) {
+          if (oppsRef.current.length < 2 || rotations >= 3) break;
+          oppIdx.current = (oppIdx.current + 1) % oppsRef.current.length;
+          setActiveIdx(oppIdx.current);
+          rotations++;
+          searches = 0;
+        }
         searches++;
+        const tgt = targetFor(oppIdx.current);
+        const ind = industryFor(oppIdx.current);
         setStage("search", "active");
-        setDetail("Searching for more companies...");
+        setDetail(ind ? `Searching: ${ind}` : "Searching the web for companies like your ideal customers...");
         const d = await post("/api/discover", {
-          profile: { summary: c.summary, target: c.target },
+          profile: { summary: c.summary, target: tgt },
         });
         if (!d.ok) {
-          if (kept === 0 && searches === 1) {
+          if (kept === 0 && searches === 1 && rotations === 0) {
             setStage("search", "stopped");
             setBusy(false);
             setError(d.json.error || "Search failed.");
             return;
           }
-          break;
+          continue;
         }
         for (const s of d.json.sites || []) {
           const h = s.host.replace(/^www\./, "");
           if (h === c.ownHost || seen.current.has(h)) continue;
           seen.current.add(h);
-          queue.current.push(s);
+          queue.current.push({ ...s, target: tgt, industry: ind });
         }
         setStage("search", "done");
         if (queue.current.length === 0) continue;
@@ -253,7 +312,7 @@ export default function CampaignRun() {
       setDetail(`Researching ${site.host} (${kept} of 5 found)`);
       const r = await post("/api/research", {
         website: site.url,
-        profile: { summary: c.summary, target: c.target, edge: c.edge },
+        profile: { summary: c.summary, target: site.target || c.target, edge: c.edge },
       });
       if (r.ok) {
         if (r.json.relationship && r.json.relationship !== "prospect") {
@@ -262,24 +321,25 @@ export default function CampaignRun() {
           setDropped((n) => n + 1);
         } else {
           kept++;
+          const card = { ...r.json, industry: site.industry || "" };
           if (campaignRef.current) {
             const added = await post("/api/track", {
               action: "add_prospect",
               campaignId: campaignRef.current,
               prospect: {
-                site: r.json.site,
-                url: r.json.url,
-                fit_score: r.json.fit_score,
-                stage: r.json.stage,
-                company_summary: r.json.company_summary,
-                emails: r.json.emails,
-                socials: r.json.socials,
-                data: r.json,
+                site: card.site,
+                url: card.url,
+                fit_score: card.fit_score,
+                stage: card.stage,
+                company_summary: card.company_summary,
+                emails: card.emails,
+                socials: card.socials,
+                data: card,
               },
             });
-            if (added.ok && added.json.id) pidsRef.current[r.json.site] = added.json.id;
+            if (added.ok && added.json.id) pidsRef.current[card.site] = added.json.id;
           }
-          setCards((prev) => [...prev, r.json]);
+          setCards((prev) => [...prev, card]);
         }
       } else {
         setUnreadable((n) => n + 1);
@@ -292,7 +352,7 @@ export default function CampaignRun() {
     setDetail("");
     setBusy(false);
     if (kept === 0) {
-      setNote("No new early-stage buyers could be found this time. Try again in a moment.");
+      setNote("No new early-stage buyers could be found this time. Try another industry below.");
     } else if (kept < 5) {
       setNote(`Found ${kept} new companies this time. Try again for more.`);
     }
@@ -308,7 +368,7 @@ export default function CampaignRun() {
         <p className="lead">
           {allDone
             ? "Review each company below, edit the drafts and send the ones you approve."
-            : "Plyde is working through four steps. You can keep this page open while it runs."}
+            : "Plyde is working through five steps. You can keep this page open while it runs."}
         </p>
 
         <ol className="stages">
@@ -345,43 +405,7 @@ export default function CampaignRun() {
       {profile && (
         <section className="paper">
           <div className="wrap">
-            <div className="panel">
-              <div className="cols">
-                <div>
-                  <h3>What you sell</h3>
-                  <p>{profile.business_summary}</p>
-                </div>
-                {market && (
-                  <div>
-                    <h3>Your market</h3>
-                    {market.competitors && market.competitors.length > 0 && (
-                      <ul>
-                        {market.competitors.map((c) => (
-                          <li key={c.url || c.name}>
-                            <a href={c.url} target="_blank" rel="noreferrer">
-                              {c.name}
-                            </a>
-                            {c.note ? `: ${c.note}` : ""}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {market.differentiators && market.differentiators.length > 0 && (
-                      <>
-                        <p>How you could stand out:</p>
-                        <ul>
-                          {market.differentiators.map((p) => (
-                            <li key={p}>{p}</li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
-                    {market.positioning && <p>{market.positioning}</p>}
-                    <p className="fine">Based on web search results. Check it before relying on it.</p>
-                  </div>
-                )}
-              </div>
-            </div>
+            <Panel profile={profile} market={market} />
 
             {cards.length > 0 && (
               <>
@@ -404,7 +428,7 @@ export default function CampaignRun() {
                     />
                   ))}
                 {ready && !busy && (
-                  <button className="more" onClick={fillBatch}>
+                  <button className="more" onClick={() => fillBatch()}>
                     Find 5 more
                   </button>
                 )}
@@ -415,6 +439,15 @@ export default function CampaignRun() {
                 </p>
               </>
             )}
+
+            <div style={{ marginTop: "48px" }}>
+              <Opportunities
+                opps={opps}
+                activeIndex={activeIdx}
+                busy={busy}
+                onPick={(i) => fillBatch(i)}
+              />
+            </div>
 
             {allDone && (
               <p style={{ marginTop: "28px" }}>
@@ -439,4 +472,4 @@ export default function CampaignRun() {
       )}
     </>
   );
-    }
+      }
