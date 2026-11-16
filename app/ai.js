@@ -75,7 +75,7 @@ async function groqModels(key) {
   return GROQ_PREFERRED.slice(0, 2);
 }
 
-async function callGroq(prompt) {
+async function callGroq(prompt, ms) {
   const key = process.env.GROQ_API_KEY;
   if (!key) return { status: 0 };
   const models = await groqModels(key);
@@ -84,7 +84,7 @@ async function callGroq(prompt) {
     try {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        signal: AbortSignal.timeout(25000),
+        signal: AbortSignal.timeout(ms),
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${key}`,
@@ -109,19 +109,23 @@ async function callGroq(prompt) {
   return { status: last };
 }
 
-export async function askAI(prompt) {
+export async function askAI(prompt, opts = {}) {
+  const steps = opts.quality
+    ? [
+        () => callGroq(prompt, 45000),
+        () => callGemini(GEMINI[1], prompt, 30000),
+        () => callGemini(GEMINI[0], prompt, 15000),
+      ]
+    : [
+        () => callGemini(GEMINI[0], prompt, 10000),
+        () => callGroq(prompt, 25000),
+        () => callGemini(GEMINI[1], prompt, 10000),
+        () => callGemini(GEMINI[2], prompt, 10000),
+      ];
+
   const statuses = [];
-
-  const first = await callGemini(GEMINI[0], prompt, 10000);
-  if (first.result) return { result: first.result };
-  statuses.push(first.status);
-
-  const groq = await callGroq(prompt);
-  if (groq.result) return { result: groq.result };
-  statuses.push(groq.status);
-
-  for (const model of GEMINI.slice(1)) {
-    const r = await callGemini(model, prompt, 10000);
+  for (const step of steps) {
+    const r = await step();
     if (r.result) return { result: r.result };
     statuses.push(r.status);
   }
@@ -130,4 +134,4 @@ export async function askAI(prompt) {
     return { error: "The free AI limit was reached. Please try again in a few minutes." };
   }
   return { error: "The AI could not answer right now. Please try again." };
-      }
+}
