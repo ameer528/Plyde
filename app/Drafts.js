@@ -38,6 +38,8 @@ function EmailBox({ d, gmail, copy, copied, onSent, sentInfo }) {
   );
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState("");
+  const [check, setCheck] = useState(null);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     try {
@@ -45,9 +47,25 @@ function EmailBox({ d, gmail, copy, copied, onSent, sentInfo }) {
     } catch {}
   }, [to, subject, body, d.site]);
 
+  useEffect(() => {
+    const addr = to.trim();
+    if (!addr.includes("@")) {
+      setCheck(null);
+      return;
+    }
+    setChecking(true);
+    const timer = setTimeout(async () => {
+      const r = await post("/api/verify", { email: addr });
+      setCheck(r.ok ? { ...r.json, for: addr } : null);
+      setChecking(false);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [to]);
+
   async function send() {
     setMsg("");
-    if (!to.trim()) {
+    const addr = to.trim();
+    if (!addr) {
       setMsg("Add the recipient's email first.");
       return;
     }
@@ -55,26 +73,56 @@ function EmailBox({ d, gmail, copy, copied, onSent, sentInfo }) {
       setMsg("Replace the [placeholders] in the message before sending.");
       return;
     }
-    const ok = window.confirm(
-      `Send this email to ${to.trim()} from ${gmail.email || "your Gmail"}?`
-    );
-    if (!ok) return;
     setSending(true);
+    let c = check && check.for === addr ? check : null;
+    if (!c) {
+      const r = await post("/api/verify", { email: addr });
+      c = r.ok ? { ...r.json, for: addr } : null;
+      setCheck(c);
+    }
+    if (!c) {
+      setSending(false);
+      setMsg("Could not verify this address right now. Try again.");
+      return;
+    }
+    if (c.status === "invalid") {
+      setSending(false);
+      setMsg("Not sent. " + (c.reasons[0] || "This address failed verification."));
+      return;
+    }
+    let allowRisky = false;
+    if (c.status === "risky") {
+      allowRisky = window.confirm(
+        "This address is risky: " + (c.reasons[0] || "") + "\n\nSend anyway?"
+      );
+      if (!allowRisky) {
+        setSending(false);
+        return;
+      }
+    }
+    const ok = window.confirm(`Send this email to ${addr} from ${gmail.email || "your Gmail"}?`);
+    if (!ok) {
+      setSending(false);
+      return;
+    }
     const r = await post("/api/gmail/send", {
-      to: to.trim(),
+      to: addr,
       subject,
       body,
       approved: true,
+      allowRisky,
     });
     setSending(false);
     if (r.ok) {
       setMsg("Sent.");
-      onSent(d.site, to.trim(), subject);
+      onSent(d.site, addr, subject);
     } else {
       setMsg(r.json.error || "Could not send.");
       if (r.json.reconnect) gmail.refresh();
     }
   }
+
+  const blocked = check && check.for === to.trim() && check.status === "invalid";
 
   return (
     <details className="draft" open>
@@ -87,13 +135,23 @@ function EmailBox({ d, gmail, copy, copied, onSent, sentInfo }) {
           onChange={(e) => setTo(e.target.value)}
           placeholder="Recipient email (none found publicly)"
         />
+        {checking && <p className="note-s">Checking this address...</p>}
+        {!checking && check && check.for === to.trim() && (
+          <p className="note-s">
+            {check.status === "ok" && "Checked: the format is valid and the domain can receive email. "}
+            {check.status === "risky" && "Risky: "}
+            {check.status === "invalid" && "Cannot send: "}
+            {check.reasons.join(" ")}{" "}
+            {check.status !== "invalid" && check.note}
+          </p>
+        )}
         <label className="lbl">Subject</label>
         <input className="in" value={subject} onChange={(e) => setSubject(e.target.value)} />
         <label className="lbl">Message</label>
         <textarea className="ta" rows={9} value={body} onChange={(e) => setBody(e.target.value)} />
         <div className="actions">
           {gmail.connected ? (
-            <button className="btn solid" disabled={sending} onClick={send}>
+            <button className="btn solid" disabled={sending || blocked} onClick={send}>
               {sending ? "Sending..." : "Send"}
             </button>
           ) : (
@@ -163,4 +221,4 @@ export default function Drafts({ d, copy, copied, gmail, onSent, sentInfo }) {
       })}
     </div>
   );
-            }
+      }
