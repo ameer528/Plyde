@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { readSession, COOKIE } from "../../../gmail";
+import { verifyEmail } from "../../../verify";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,20 @@ export async function POST(request) {
   }
   if (!subject || !text) {
     return NextResponse.json({ error: "The subject and message cannot be empty." }, { status: 400 });
+  }
+
+  const check = await verifyEmail(to);
+  if (check.status === "invalid") {
+    return NextResponse.json(
+      { error: "Not sent. " + (check.reasons[0] || "This address failed verification.") },
+      { status: 400 }
+    );
+  }
+  if (check.status === "risky" && b.allowRisky !== true) {
+    return NextResponse.json(
+      { error: "Risky address. " + (check.reasons[0] || ""), risky: true },
+      { status: 409 }
+    );
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -129,4 +144,4 @@ export async function POST(request) {
     maxAge: 60 * 60 * 48,
   });
   return res;
-                         }
+    }
