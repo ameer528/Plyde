@@ -15,6 +15,7 @@ export default function Company({ d, copy, copied, gmail, onSent, sentInfo }) {
         <div className="c-head">
           <h3 className="c-name">{d.site}</h3>
           <span className="tag">{STAGES[d.stage] || "Growing"}</span>
+          {d.industry && <span className="tag">{d.industry}</span>}
         </div>
         <p>{d.company_summary}</p>
         <p>
@@ -70,4 +71,4 @@ export default function Company({ d, copy, copied, gmail, onSent, sentInfo }) {
       </div>
     </article>
   );
-              }
+                }
