@@ -4,6 +4,14 @@ export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 const ORIGIN = "https://plyde.vercel.app";
+const ALLOWED = [
+  "/api/analyze",
+  "/api/competitors",
+  "/api/discover",
+  "/api/research",
+  "/api/opportunities",
+  "/api/verify",
+];
 
 async function call(path, body) {
   try {
@@ -11,15 +19,15 @@ async function call(path, body) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(120000),
+      signal: AbortSignal.timeout(200000),
     });
     let json = {};
     try {
       json = await res.json();
     } catch {}
-    return { ok: res.ok, json };
-  } catch {
-    return { ok: false, json: { error: "request failed" } };
+    return { ok: res.ok, status: res.status, json };
+  } catch (e) {
+    return { ok: false, status: 0, json: { error: "request failed: " + String(e && e.name ? e.name : e) } };
   }
 }
 
@@ -27,6 +35,20 @@ export async function GET(request) {
   const url = new URL(request.url);
   if (!process.env.DEBUG_KEY || url.searchParams.get("k") !== process.env.DEBUG_KEY) {
     return Response.json({ error: "not allowed" }, { status: 403 });
+  }
+
+  const proxy = url.searchParams.get("proxy");
+  if (proxy) {
+    if (!ALLOWED.includes(proxy)) {
+      return Response.json({ error: "path not allowed" }, { status: 400 });
+    }
+    let bodyObj = {};
+    try {
+      bodyObj = JSON.parse(url.searchParams.get("body") || "{}");
+    } catch {}
+    const started = Date.now();
+    const r = await call(proxy, bodyObj);
+    return Response.json({ ms: Date.now() - started, status: r.status, json: r.json });
   }
 
   if (url.searchParams.get("dbtest")) {
@@ -97,4 +119,4 @@ export async function GET(request) {
     );
   }
   return Response.json(out);
-                                                    }
+}
