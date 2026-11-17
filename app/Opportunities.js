@@ -2,7 +2,7 @@
 
 import "./opps.css";
 
-export default function Opportunities({ opps, activeIndex, busy, onPick }) {
+export default function Opportunities({ opps, activeIndex, busy, onPick, note, onRetry }) {
   if (!opps || opps.length === 0) return null;
   return (
     <>
@@ -12,6 +12,14 @@ export default function Opportunities({ opps, activeIndex, busy, onPick }) {
         real but easy to miss. These are informed guesses from AI and web search, so check them
         before you build outreach around them. Tap one to search it.
       </p>
+      {note && (
+        <p className="msg">
+          {note}{" "}
+          <button className="btn" disabled={busy} onClick={onRetry}>
+            Try industry mapping again
+          </button>
+        </p>
+      )}
       {opps.map((o, i) => (
         <div key={o.name} className={"opp" + (i === activeIndex ? " on" : "")}>
           <div className="head">
@@ -53,4 +61,4 @@ export default function Opportunities({ opps, activeIndex, busy, onPick }) {
       ))}
     </>
   );
-        }
+}
