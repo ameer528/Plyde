@@ -33,6 +33,7 @@ export default function CampaignRun() {
   const [detail, setDetail] = useState("");
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
+  const [mapNote, setMapNote] = useState("");
   const [profile, setProfile] = useState(null);
   const [market, setMarket] = useState(null);
   const [opps, setOpps] = useState([]);
@@ -90,6 +91,7 @@ export default function CampaignRun() {
       setUnreadable(session.unreadable || 0);
       setDropped(session.dropped || 0);
       setOffTarget(session.offTarget || 0);
+      setMapNote(session.mapNote || "");
       campaignRef.current = session.campaignId || null;
       pidsRef.current = session.pids || {};
       oppsRef.current = session.opps || [];
@@ -141,6 +143,7 @@ export default function CampaignRun() {
           dropped,
           offTarget,
           stages,
+          mapNote,
           opps: oppsRef.current,
           oppIdx: oppIdx.current,
           campaignId: campaignRef.current,
@@ -151,7 +154,7 @@ export default function CampaignRun() {
         })
       );
     } catch {}
-  }, [restored, profile, market, cards, unreadable, dropped, offTarget, stages, opps, activeIdx, ready]);
+  }, [restored, profile, market, cards, unreadable, dropped, offTarget, stages, opps, activeIdx, mapNote, ready]);
 
   function onSent(site, to, subject) {
     const entry = { site, to, subject, at: Date.now() };
@@ -182,6 +185,49 @@ export default function CampaignRun() {
     setCopied(key);
     setTimeout(() => setCopied(""), 2000);
     if (openUrl) window.open(openUrl, "_blank", "noopener");
+  }
+
+  async function mapIndustries(summary, ownHost, prof) {
+    setStage("map", "active");
+    setDetail(
+      "Thinking about every industry that could use your service, including ones you may not expect. This takes about a minute."
+    );
+    let o = await post("/api/opportunities", { profile: { summary }, host: ownHost });
+    const good = (r) => r.ok && Array.isArray(r.json.opportunities) && r.json.opportunities.length > 0;
+    if (!good(o)) {
+      setDetail("Trying the industry research once more...");
+      o = await post("/api/opportunities", { profile: { summary }, host: ownHost });
+    }
+    let list = good(o) ? o.json.opportunities : [];
+    if (list.length === 0) {
+      const why = o.json && o.json.error ? ": " + o.json.error : "";
+      setMapNote("Industry mapping did not finish" + why + " Showing your basic customer types instead.");
+      list = ((prof && prof.segments) || []).map((s) => ({
+        name: s.name,
+        buyer: "",
+        pain: s.reason || "",
+        use: "",
+        trigger: "",
+        obviousness: "obvious",
+        fit_score: Number(s.fit_score) || 0,
+        phrase: s.name,
+      }));
+    } else {
+      setMapNote("");
+    }
+    oppsRef.current = list;
+    oppIdx.current = 0;
+    setOpps(list);
+    setActiveIdx(0);
+    setStage("map", "done");
+  }
+
+  async function retryMap() {
+    if (!ctx.current || !profile) return;
+    setBusy(true);
+    await mapIndustries(ctx.current.summary, ctx.current.ownHost, profile);
+    setDetail("");
+    setBusy(false);
   }
 
   async function runCampaign(c) {
@@ -229,27 +275,7 @@ export default function CampaignRun() {
     }
     setStage("market", "done");
 
-    setStage("map", "active");
-    setDetail("Thinking about every industry that could use your service, including ones you may not expect...");
-    const o = await post("/api/opportunities", { profile: { summary }, host: ownHost });
-    let list = o.ok && Array.isArray(o.json.opportunities) ? o.json.opportunities : [];
-    if (list.length === 0) {
-      list = (prof.segments || []).map((s) => ({
-        name: s.name,
-        buyer: "",
-        pain: s.reason || "",
-        use: "",
-        trigger: "",
-        obviousness: "obvious",
-        fit_score: Number(s.fit_score) || 0,
-        phrase: s.name,
-      }));
-    }
-    oppsRef.current = list;
-    oppIdx.current = 0;
-    setOpps(list);
-    setActiveIdx(0);
-    setStage("map", "done");
+    await mapIndustries(summary, ownHost, prof);
 
     ctx.current = { summary, target, edge, ownHost };
     setReady(true);
@@ -446,6 +472,8 @@ export default function CampaignRun() {
                 activeIndex={activeIdx}
                 busy={busy}
                 onPick={(i) => fillBatch(i)}
+                note={mapNote}
+                onRetry={retryMap}
               />
             </div>
 
@@ -472,4 +500,4 @@ export default function CampaignRun() {
       )}
     </>
   );
-      }
+}
