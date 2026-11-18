@@ -1,32 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import Header from "../Header";
 import useGmail from "../useGmail";
+import useName from "../useName";
 
 export default function Welcome() {
   const router = useRouter();
   const { gmail, disconnect } = useGmail();
-  const [name, setName] = useState("");
-
-  useEffect(() => {
-    try {
-      setName(localStorage.getItem("plyde_name") || "");
-    } catch {}
-  }, []);
+  const { name, loaded, save } = useName(gmail.connected);
+  const [input, setInput] = useState("");
 
   useEffect(() => {
     if (gmail.loaded && !gmail.connected) router.replace("/");
   }, [gmail, router]);
 
-  function save(e) {
+  useEffect(() => {
+    if (loaded && name) router.replace("/");
+  }, [loaded, name, router]);
+
+  async function submit(e) {
     e.preventDefault();
-    const n = name.trim().slice(0, 60);
+    const n = input.trim();
     if (!n) return;
-    try {
-      localStorage.setItem("plyde_name", n);
-    } catch {}
+    await save(n);
     router.push("/");
   }
 
@@ -35,20 +34,23 @@ export default function Welcome() {
       <Header gmail={gmail} name="" onDisconnect={disconnect} />
       <section className="hero narrow">
         <h1 className="h1s">What name should go on your emails?</h1>
-        <p className="lead">You only set this once. Plyde signs every message with it.</p>
-        <form className="ask" onSubmit={save}>
+        <p className="lead">
+          You only set this once. It follows your account, so you won't be asked again on another
+          device.
+        </p>
+        <form className="ask" onSubmit={submit}>
           <input
             type="text"
             placeholder="Your name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
             aria-label="Your name"
           />
-          <button type="submit" disabled={!name.trim()}>
+          <button type="submit" disabled={!input.trim()}>
             Continue
           </button>
         </form>
       </section>
     </>
   );
-    }
+              }
