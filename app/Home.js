@@ -6,18 +6,17 @@ import Link from "next/link";
 import Header from "./Header";
 import Rewrite from "./Rewrite";
 import useGmail from "./useGmail";
+import useName from "./useName";
 
 export default function Home() {
   const router = useRouter();
   const { gmail, disconnect } = useGmail();
-  const [name, setName] = useState("");
+  const { name, loaded } = useName(gmail.connected);
   const [hasSession, setHasSession] = useState(false);
-  const [ready, setReady] = useState(false);
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
     try {
-      setName(localStorage.getItem("plyde_name") || "");
       setHasSession(!!localStorage.getItem("plyde_session"));
     } catch {}
     const q = new URLSearchParams(window.location.search).get("gmail");
@@ -29,12 +28,11 @@ export default function Home() {
       setNotice(texts[q] || "");
       window.history.replaceState({}, "", "/");
     }
-    setReady(true);
   }, []);
 
   useEffect(() => {
-    if (ready && gmail.loaded && gmail.connected && !name) router.replace("/welcome");
-  }, [ready, gmail, name, router]);
+    if (loaded && gmail.loaded && gmail.connected && !name) router.replace("/welcome");
+  }, [loaded, gmail, name, router]);
 
   return (
     <>
@@ -64,7 +62,7 @@ export default function Home() {
           </>
         )}
 
-        {gmail.loaded && gmail.connected && name && (
+        {gmail.loaded && gmail.connected && loaded && name && (
           <>
             <p className="greet">Welcome back, {name}.</p>
             <div className="ctas">
@@ -100,4 +98,4 @@ export default function Home() {
       </section>
     </>
   );
-    }
+          }
