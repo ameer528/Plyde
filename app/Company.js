@@ -5,6 +5,7 @@ import Drafts from "./Drafts";
 
 export default function Company({ d, copy, copied, gmail, onSent, sentInfo }) {
   const socialKeys = Object.keys(d.socials || {});
+  const people = Array.isArray(d.people) ? d.people : [];
   return (
     <article className="company">
       <div className="score">
@@ -27,25 +28,48 @@ export default function Company({ d, copy, copied, gmail, onSent, sentInfo }) {
         </p>
 
         <div className="contact">
-          {d.emails && d.emails.length > 0 ? (
-            d.emails.map((m) => (
-              <div key={m.email}>
-                Email: {m.email}{" "}
-                <a href={m.source} target="_blank" rel="noreferrer">
+          <strong style={{ color: "#000" }}>Decision makers</strong>
+          {people.length > 0 ? (
+            people.map((p) => (
+              <div key={p.name}>
+                {p.name}, {p.title}{" "}
+                {p.linkedin && (
+                  <a href={p.linkedin} target="_blank" rel="noreferrer">
+                    LinkedIn
+                  </a>
+                )}{" "}
+                {p.email && <span>{p.email}</span>}{" "}
+                <a href={p.source} target="_blank" rel="noreferrer">
                   (source)
                 </a>
               </div>
             ))
           ) : (
-            <div>
-              No public email found.{" "}
-              {d.contact_page && (
-                <a href={d.contact_page} target="_blank" rel="noreferrer">
-                  Their contact page
-                </a>
-              )}
-            </div>
+            <div>No named decision maker is published on their site.</div>
           )}
+
+          <div style={{ marginTop: "10px" }}>
+            {d.emails && d.emails.length > 0 ? (
+              d.emails.map((m) => (
+                <div key={m.email}>
+                  Email: {m.email}{" "}
+                  <a href={m.source} target="_blank" rel="noreferrer">
+                    (source)
+                  </a>
+                </div>
+              ))
+            ) : (
+              <div>
+                No public email found.{" "}
+                {d.contact_page && (
+                  <a href={d.contact_page} target="_blank" rel="noreferrer">
+                    Their contact page
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+
           {socialKeys.length > 0 ? (
             <div className="handles">
               {socialKeys.map((k) => (
@@ -71,4 +95,4 @@ export default function Company({ d, copy, copied, gmail, onSent, sentInfo }) {
       </div>
     </article>
   );
-                }
+            }
