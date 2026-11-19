@@ -66,6 +66,23 @@ export async function GET(request) {
         .single();
       out.insert = ins.error ? { error: ins.error.message, code: ins.error.code } : "ok";
       if (ins.data) await supabase.from("campaigns").delete().eq("id", ins.data.id);
+
+      const sel = await supabase
+        .from("profiles")
+        .select("name,booking_link")
+        .eq("owner_email", "debug@plyde.test")
+        .maybeSingle();
+      out.profiles_select = sel.error
+        ? { error: sel.error.message, code: sel.error.code, details: sel.error.details, hint: sel.error.hint }
+        : "ok";
+
+      const ups = await supabase
+        .from("profiles")
+        .upsert({ owner_email: "debug@plyde.test", name: "debug" }, { onConflict: "owner_email" });
+      out.profiles_upsert = ups.error
+        ? { error: ups.error.message, code: ups.error.code, details: ups.error.details, hint: ups.error.hint }
+        : "ok";
+      if (!ups.error) await supabase.from("profiles").delete().eq("owner_email", "debug@plyde.test");
     } catch (e) {
       out.exception = String(e && e.message ? e.message : e);
     }
@@ -119,4 +136,4 @@ export async function GET(request) {
     );
   }
   return Response.json(out);
-}
+        }
