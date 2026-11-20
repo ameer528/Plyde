@@ -3,14 +3,17 @@
 import { useState, useEffect, useCallback } from "react";
 
 export default function useName(gmailConnected) {
+  const connected = !!gmailConnected;
   const [name, setNameState] = useState("");
-  const [loaded, setLoaded] = useState(false);
+  const [doneFor, setDoneFor] = useState(null);
 
   useEffect(() => {
-    if (!gmailConnected) {
-      setLoaded(true);
+    if (!connected) {
+      setNameState("");
+      setDoneFor(false);
       return;
     }
+    let cancelled = false;
     let cached = "";
     try {
       cached = localStorage.getItem("plyde_name") || "";
@@ -20,16 +23,29 @@ export default function useName(gmailConnected) {
     fetch("/api/profile")
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
+        if (cancelled) return;
         if (j && j.name) {
           setNameState(j.name);
           try {
             localStorage.setItem("plyde_name", j.name);
           } catch {}
+        } else if (j && cached) {
+          fetch("/api/profile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: cached }),
+          }).catch(() => {});
         }
-        setLoaded(true);
+        setDoneFor(true);
       })
-      .catch(() => setLoaded(true));
-  }, [gmailConnected]);
+      .catch(() => {
+        if (!cancelled) setDoneFor(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connected]);
 
   const save = useCallback(async (value) => {
     const trimmed = value.trim().slice(0, 60);
@@ -46,5 +62,5 @@ export default function useName(gmailConnected) {
     } catch {}
   }, []);
 
-  return { name, loaded, save };
+  return { name, loaded: doneFor === connected, save };
 }
