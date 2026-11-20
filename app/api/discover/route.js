@@ -146,7 +146,7 @@ export async function POST(request) {
   if (!email) {
     return Response.json({ error: "Connect Gmail first." }, { status: 401 });
   }
-  const lim = await checkLimit(request, "discover", 0, 8);
+  const lim = await checkLimit(request, "discover", 0, 1000);
   if (!lim.allowed) {
     return Response.json(
       { error: "Daily search limit reached. Try again tomorrow.", limit: true },
@@ -241,4 +241,4 @@ export async function POST(request) {
     skipped_known: skippedKnown,
     sites: screened.map((s) => ({ host: s.host, url: s.url, title: s.title })),
   });
-                             }
+    }
