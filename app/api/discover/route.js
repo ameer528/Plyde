@@ -1,4 +1,6 @@
 import { askAI } from "../../ai";
+import { db, owner } from "../../db";
+import { checkLimit } from "../../usage";
 
 const SKIP = [
   "linkedin.com", "facebook.com", "instagram.com", "twitter.com", "x.com",
@@ -24,6 +26,28 @@ const SKIP = [
 
 function skipHost(host) {
   return SKIP.some((s) => host === s || host.endsWith("." + s));
+}
+
+function normHost(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("/")[0]
+    .trim();
+}
+
+async function knownSites(email) {
+  try {
+    const { data } = await db()
+      .from("prospects")
+      .select("site")
+      .eq("owner_email", email)
+      .limit(10000);
+    return new Set((data || []).map((r) => normHost(r.site)).filter(Boolean));
+  } catch {
+    return new Set();
+  }
 }
 
 async function makeQueries(profile) {
@@ -118,6 +142,18 @@ Return ONLY valid JSON: {"labels": [{"i": 0, "label": "buyer"}]}`;
 }
 
 export async function POST(request) {
+  const email = owner(request);
+  if (!email) {
+    return Response.json({ error: "Connect Gmail first." }, { status: 401 });
+  }
+  const lim = await checkLimit(request, "discover", 0, 8);
+  if (!lim.allowed) {
+    return Response.json(
+      { error: "Daily search limit reached. Try again tomorrow.", limit: true },
+      { status: 429 }
+    );
+  }
+
   let body;
   try {
     body = await request.json();
@@ -138,6 +174,9 @@ export async function POST(request) {
     return Response.json({ error: "The search key is missing on the server." }, { status: 500 });
   }
 
+  const known = await knownSites(email);
+  let skippedKnown = 0;
+
   const queries = await makeQueries(profile);
   const sites = [];
   let lastStatus = 200;
@@ -148,6 +187,10 @@ export async function POST(request) {
         const u = new URL(r.url);
         const host = u.hostname.replace(/^www\./, "").toLowerCase();
         if (skipHost(host)) continue;
+        if (known.has(host)) {
+          skippedKnown++;
+          continue;
+        }
         if (sites.some((s) => s.host === host)) continue;
         sites.push({
           host,
@@ -178,6 +221,16 @@ export async function POST(request) {
     if (lastStatus === 429 || lastStatus === 432 || lastStatus === 433) {
       return Response.json({ error: "The free search limit was reached. Try again later." }, { status: 502 });
     }
+    if (skippedKnown > 0) {
+      return Response.json(
+        {
+          error:
+            "Every company this search found is already in your list. Try a different customer type.",
+          skipped_known: skippedKnown,
+        },
+        { status: 404 }
+      );
+    }
     return Response.json({ error: "No companies found. Try again in a moment." }, { status: 404 });
   }
 
@@ -185,6 +238,7 @@ export async function POST(request) {
   return Response.json({
     queries,
     screened_out: Math.min(sites.length, 15) - screened.length,
+    skipped_known: skippedKnown,
     sites: screened.map((s) => ({ host: s.host, url: s.url, title: s.title })),
   });
-                          }
+                             }
