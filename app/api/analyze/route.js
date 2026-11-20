@@ -1,4 +1,5 @@
 import { askAI } from "../../ai";
+import { checkLimit } from "../../usage";
 
 function cleanUrl(input) {
   let value = String(input || "").trim();
@@ -79,6 +80,19 @@ Give 5 segments, sorted by fit_score from highest to lowest.`;
 }
 
 export async function POST(request) {
+  const lim = await checkLimit(request, "analyze", 3, 30);
+  if (!lim.allowed) {
+    return Response.json(
+      {
+        error: lim.signedIn
+          ? "Daily limit reached. Try again tomorrow."
+          : "Free limit reached. Sign up to keep analyzing.",
+        limit: true,
+      },
+      { status: 429 }
+    );
+  }
+
   let body;
   try {
     body = await request.json();
@@ -126,4 +140,4 @@ export async function POST(request) {
     return Response.json({ error: answer.error }, { status: 502 });
   }
   return Response.json({ site: label, result: answer.result });
-}
+                                        }
