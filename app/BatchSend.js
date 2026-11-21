@@ -259,6 +259,8 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
         Risky or invalid addresses are skipped automatically. An opt-out line is added to every
         email.
       </p>
+                <ReplyHelper sentLog={sentLog} />
+
     </div>
   );
 }
