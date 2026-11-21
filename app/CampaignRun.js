@@ -7,8 +7,11 @@ import Header from "./Header";
 import Company from "./Company";
 import Panel from "./Panel";
 import Opportunities from "./Opportunities";
+import BatchSend from "./BatchSend";
 import useGmail from "./useGmail";
 import { sleep, post } from "./ui";
+
+const FIND = 10;
 
 const STAGES = [
   { key: "read", label: "Researching your business" },
@@ -297,7 +300,7 @@ export default function CampaignRun() {
     let rotations = 0;
     setStage("search", "active");
 
-    while (kept < 5) {
+    while (kept < FIND) {
       if (queue.current.length === 0) {
         if (searches >= 2) {
           if (oppsRef.current.length < 2 || rotations >= 3) break;
@@ -335,7 +338,7 @@ export default function CampaignRun() {
 
       setStage("research", "active");
       const site = queue.current.shift();
-      setDetail(`Researching ${site.host} (${kept} of 5 found)`);
+      setDetail(`Researching ${site.host} (${kept} of ${FIND} found)`);
       const r = await post("/api/research", {
         website: site.url,
         profile: { summary: c.summary, target: site.target || c.target, edge: c.edge },
@@ -379,7 +382,7 @@ export default function CampaignRun() {
     setBusy(false);
     if (kept === 0) {
       setNote("No new early-stage buyers could be found this time. Try another industry below.");
-    } else if (kept < 5) {
+    } else if (kept < FIND) {
       setNote(`Found ${kept} new companies this time. Try again for more.`);
     }
   }
@@ -455,7 +458,7 @@ export default function CampaignRun() {
                   ))}
                 {ready && !busy && (
                   <button className="more" onClick={() => fillBatch()}>
-                    Find 5 more
+                    Find {FIND} more
                   </button>
                 )}
                 <p className="fine">
@@ -463,6 +466,13 @@ export default function CampaignRun() {
                   {dropped > 0 ? `${dropped} established company(ies) were left out. ` : ""}
                   {unreadable > 0 ? `${unreadable} site(s) could not be read.` : ""}
                 </p>
+
+                <BatchSend
+                  cards={cards}
+                  sentLog={sentLog}
+                  gmail={{ ...gmail, refresh }}
+                  onSent={onSent}
+                />
               </>
             )}
 
@@ -500,4 +510,4 @@ export default function CampaignRun() {
       )}
     </>
   );
-}
+        }
