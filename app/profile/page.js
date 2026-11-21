@@ -18,6 +18,9 @@ export default function Profile() {
   const [name, setName] = useState("");
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+  const [link, setLink] = useState("");
+  const [linkMsg, setLinkMsg] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     try {
@@ -38,7 +41,40 @@ export default function Profile() {
         else setError(j.error || "Could not load your campaigns.");
       })
       .catch(() => setError("Network problem. Please try again."));
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j && j.bookingLink) setLink(j.bookingLink);
+      })
+      .catch(() => {});
   }, [gmail.loaded, gmail.connected]);
+
+  async function saveLink() {
+    setLinkMsg("");
+    const value = link.trim();
+    if (value && !/^https:\/\/\S+$/i.test(value)) {
+      setLinkMsg("The link must start with https:// and have no spaces.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await fetch("/api/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingLink: value }),
+      });
+      setLinkMsg(
+        r.ok
+          ? value
+            ? "Saved. Every email you send now includes this link."
+            : "Removed. Emails will no longer include a booking link."
+          : "Could not save the link. Try again."
+      );
+    } catch {
+      setLinkMsg("Network problem. Please try again.");
+    }
+    setSaving(false);
+  }
 
   const t = data ? data.totals : null;
   const channels = t ? Object.keys(t.channels).sort((a, b) => t.channels[b] - t.channels[a]) : [];
@@ -93,6 +129,26 @@ export default function Profile() {
           </>
         )}
 
+        <div className="plat" style={{ marginTop: "24px" }}>
+          <h3>Booking link</h3>
+          <p className="note-s">
+            Paste your Cal.com or Calendly link. Plyde adds a line to every email you send so
+            interested people can book a call straight away. You don't have to do anything else.
+          </p>
+          <input
+            className="in"
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            placeholder="https://cal.com/your-name/intro-call"
+          />
+          <div className="actions">
+            <button className="btn solid" disabled={saving} onClick={saveLink}>
+              {saving ? "Saving..." : "Save link"}
+            </button>
+          </div>
+          {linkMsg && <p className="msg">{linkMsg}</p>}
+        </div>
+
         <div className="ctas">
           <Link className="cta" href="/campaign">
             Run a campaign
@@ -145,4 +201,4 @@ export default function Profile() {
       </section>
     </>
   );
-    }
+              }
