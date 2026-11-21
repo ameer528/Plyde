@@ -7,6 +7,7 @@ import Header from "../Header";
 import useGmail from "../useGmail";
 import { LABELS } from "../ui";
 import "../profile.css";
+import CalendlyConnect from "../CalendlyConnect";
 
 function channelName(k) {
   return k === "email" ? "Email" : LABELS[k] || k;
@@ -129,7 +130,8 @@ export default function Profile() {
           </>
         )}
 
-        <div className="plat" style={{ marginTop: "24px" }}>
+               <CalendlyConnect />
+                 <div className="plat" style={{ marginTop: "24px" }}>
           <h3>Booking link</h3>
           <p className="note-s">
             Paste your Cal.com or Calendly link. Plyde adds a line to every email you send so
