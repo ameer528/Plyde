@@ -98,15 +98,17 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
     setPicked(next);
   }
 
-  async function run() {
-    const list = chosen.slice(0, BATCH_MAX);
+  async function run(source) {
+    const list = source.slice(0, BATCH_MAX);
     if (!list.length) return;
     if (!gmail.connected) {
       add("Connect Gmail first.");
       return;
     }
+    const left = source.length - list.length;
     const ok = window.confirm(
-      `Send ${list.length} email${list.length > 1 ? "s" : ""} from ${gmail.email || "your Gmail"}?\n\nThey go out one at a time, about 1 to 2 minutes apart. Keep this page open and your screen on until it finishes.`
+      `Send ${list.length} email${list.length > 1 ? "s" : ""} from ${gmail.email || "your Gmail"}?\n\nThey go out one at a time, about 1 to 2 minutes apart. Keep this page open and your screen on until it finishes.` +
+        (left > 0 ? `\n\n${left} more will wait for the next batch.` : "")
     );
     if (!ok) return;
 
@@ -177,12 +179,21 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
     <div style={{ marginTop: "40px" }}>
       <h2>Send a batch</h2>
       <p className="sub">
-        Tick the emails you approve, up to {BATCH_MAX} at a time. Plyde sends them one by one,
-        about 1 to 2 minutes apart, so your Gmail is not flagged. Keep this page open while it
-        runs.
+        Send everything that is ready in one tap, or tick the emails you want, up to {BATCH_MAX} at
+        a time. Plyde sends them one by one, about 1 to 2 minutes apart, so your Gmail is not
+        flagged. Keep this page open while it runs.
       </p>
 
       <div className="actions" style={{ marginBottom: "12px" }}>
+        <button
+          className="btn solid"
+          disabled={running || ready.length === 0}
+          onClick={() => run(ready)}
+        >
+          {running
+            ? "Sending..."
+            : `Send all ready (${Math.min(BATCH_MAX, ready.length)})`}
+        </button>
         <button className="btn" disabled={running} onClick={selectFirst}>
           Select first {Math.min(BATCH_MAX, ready.length)} ready
         </button>
@@ -220,8 +231,12 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
       ))}
 
       <div className="actions" style={{ marginTop: "16px" }}>
-        <button className="btn solid" disabled={running || chosen.length === 0} onClick={run}>
-          {running ? "Sending..." : `Approve and send ${chosen.length}`}
+        <button
+          className="btn"
+          disabled={running || chosen.length === 0}
+          onClick={() => run(chosen)}
+        >
+          {running ? "Sending..." : `Send ticked (${chosen.length})`}
         </button>
         {running && (
           <button className="btn" onClick={() => (stopRef.current = true)}>
@@ -244,4 +259,4 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
       </p>
     </div>
   );
-    }
+}
