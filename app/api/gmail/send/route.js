@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { readSession, COOKIE } from "../../../gmail";
 import { verifyEmail } from "../../../verify";
+import { db } from "../../../db";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,23 @@ const OPT_OUT = '\n\n--\nNot interested? Just reply "no thanks" and I will not c
 
 function oneLine(value, max) {
   return String(value || "").replace(/[\r\n]+/g, " ").trim().slice(0, max);
+}
+
+async function bookingLink(session) {
+  try {
+    const email = session && session.email ? String(session.email).toLowerCase() : "";
+    if (!email) return "";
+    const { data } = await db()
+      .from("profiles")
+      .select("booking_link")
+      .eq("owner_email", email)
+      .maybeSingle();
+    const link = String((data && data.booking_link) || "").trim();
+    if (!/^https:\/\/\S+$/i.test(link) || link.length > 300) return "";
+    return link;
+  } catch {
+    return "";
+  }
 }
 
 export async function POST(request) {
@@ -70,6 +88,12 @@ export async function POST(request) {
     );
   }
 
+  const link = b.noBooking === true ? "" : await bookingLink(session);
+  const fullText =
+    link && !text.includes(link)
+      ? text + "\n\nIf you'd like to talk, you can pick a time here: " + link
+      : text;
+
   let accessToken;
   try {
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -100,7 +124,7 @@ export async function POST(request) {
   }
 
   const subjectEncoded = `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`;
-  const bodyEncoded = Buffer.from(text + OPT_OUT, "utf8")
+  const bodyEncoded = Buffer.from(fullText + OPT_OUT, "utf8")
     .toString("base64")
     .replace(/.{76}/g, "$&\r\n");
   const message = [
@@ -144,4 +168,4 @@ export async function POST(request) {
     maxAge: 60 * 60 * 48,
   });
   return res;
-    }
+}
