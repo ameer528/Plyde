@@ -1,9 +1,14 @@
+
 import { NextResponse } from "next/server";
 import { verifyEmail } from "../../verify";
+import { owner } from "../../db";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request) {
+  if (!owner(request)) {
+    return NextResponse.json({ error: "Connect Gmail first." }, { status: 401 });
+  }
   let b;
   try {
     b = await request.json();
