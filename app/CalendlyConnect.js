@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import CalcomConnect from "./CalcomConnect";
 
 export default function CalendlyConnect() {
   const [info, setInfo] = useState(null);
@@ -68,60 +69,64 @@ export default function CalendlyConnect() {
   }
 
   return (
-    <div className="plat" style={{ marginTop: "24px" }}>
-      <h3>Calendly</h3>
-      {!info && <p className="note-s">Loading...</p>}
+    <>
+      <div className="plat" style={{ marginTop: "24px" }}>
+        <h3>Calendly</h3>
+        {!info && <p className="note-s">Loading...</p>}
 
-      {info && !info.connected && (
-        <>
-          <p className="note-s">
-            Connect Calendly once. Plyde adds your booking link to every email and marks a
-            prospect as booked when they pick a time. You don't have to do anything else.
-          </p>
-          <div className="actions">
-            <a className="btn solid" href="/api/calendly/connect">
-              Connect Calendly
-            </a>
-          </div>
-        </>
-      )}
+        {info && !info.connected && (
+          <>
+            <p className="note-s">
+              Connect Calendly once. Plyde adds your booking link to every email and marks a
+              prospect as booked when they pick a time. You don't have to do anything else.
+            </p>
+            <div className="actions">
+              <a className="btn solid" href="/api/calendly/connect">
+                Connect Calendly
+              </a>
+            </div>
+          </>
+        )}
 
-      {info && info.connected && (
-        <>
-          {events.length > 0 ? (
-            <>
-              <label className="lbl">Which meeting type should prospects book?</label>
-              <select className="in" value={pick} onChange={(e) => setPick(e.target.value)}>
-                {events.map((e) => (
-                  <option key={e.url} value={e.url}>
-                    {e.name}
-                    {e.minutes ? " (" + e.minutes + " min)" : ""}
-                  </option>
-                ))}
-              </select>
-              <div className="actions">
-                <button className="btn solid" disabled={busy || !pick} onClick={choose}>
-                  {busy ? "Saving..." : "Save meeting type"}
-                </button>
-              </div>
-            </>
-          ) : (
-            <p className="note-s">No active meeting types found in your Calendly account.</p>
-          )}
-          {info.eventName && <p className="note-s">In use: {info.eventName}</p>}
-          <p className="note-s">
-            {info.tracking
-              ? "Booked calls are tracked automatically."
-              : "Automatic booked-call tracking is not on for this account."}
-          </p>
-          <div className="actions">
-            <button className="btn" disabled={busy} onClick={disconnect}>
-              Disconnect
-            </button>
-          </div>
-        </>
-      )}
-      {msg && <p className="msg">{msg}</p>}
-    </div>
+        {info && info.connected && (
+          <>
+            {events.length > 0 ? (
+              <>
+                <label className="lbl">Which meeting type should prospects book?</label>
+                <select className="in" value={pick} onChange={(e) => setPick(e.target.value)}>
+                  {events.map((e) => (
+                    <option key={e.url} value={e.url}>
+                      {e.name}
+                      {e.minutes ? " (" + e.minutes + " min)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <div className="actions">
+                  <button className="btn solid" disabled={busy || !pick} onClick={choose}>
+                    {busy ? "Saving..." : "Save meeting type"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="note-s">No active meeting types found in your Calendly account.</p>
+            )}
+            {info.eventName && <p className="note-s">In use: {info.eventName}</p>}
+            <p className="note-s">
+              {info.tracking
+                ? "Booked calls are tracked automatically."
+                : "Automatic booked-call tracking is not on for this account."}
+            </p>
+            <div className="actions">
+              <button className="btn" disabled={busy} onClick={disconnect}>
+                Disconnect
+              </button>
+            </div>
+          </>
+        )}
+        {msg && <p className="msg">{msg}</p>}
+      </div>
+
+      <CalcomConnect />
+    </>
   );
-        }
+}
