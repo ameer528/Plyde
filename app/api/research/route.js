@@ -1,4 +1,5 @@
 import { askAI } from "../../ai";
+import { owner } from "../../db";
 
 function cleanUrl(input) {
   let value = String(input || "").trim();
@@ -335,6 +336,10 @@ const TEAM_HREF = /\/(team|people|leadership|our-team|meet-the-team|management|f
 const TEAM_LABEL = /^(team|our team|people|leadership|meet the team|founders|management)$/i;
 
 export async function POST(request) {
+  if (!owner(request)) {
+    return Response.json({ error: "Connect Gmail first." }, { status: 401 });
+  }
+
   let body;
   try {
     body = await request.json();
@@ -474,4 +479,4 @@ export async function POST(request) {
     contact_page: contactPage,
     drafts,
   });
-      }
+}
