@@ -1,4 +1,5 @@
 import { askAI } from "../../ai";
+import { owner } from "../../db";
 
 async function searchNotes(summary, key) {
   if (!key) return "";
@@ -32,6 +33,10 @@ function text(v, max) {
 }
 
 export async function POST(request) {
+  if (!owner(request)) {
+    return Response.json({ error: "Connect Gmail first." }, { status: 401 });
+  }
+
   let body;
   try {
     body = await request.json();
@@ -97,4 +102,4 @@ Return ONLY valid JSON: {"opportunities": [ {"name":"","buyer":"","pain":"","use
   }
   list.sort((a, b) => b.fit_score - a.fit_score);
   return Response.json({ opportunities: list.slice(0, 16) });
-    }
+}
