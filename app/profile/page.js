@@ -6,8 +6,9 @@ import Link from "next/link";
 import Header from "../Header";
 import useGmail from "../useGmail";
 import { LABELS } from "../ui";
-import "../profile.css";
 import CalendlyConnect from "../CalendlyConnect";
+import FollowUps from "../FollowUps";
+import "../profile.css";
 
 function channelName(k) {
   return k === "email" ? "Email" : LABELS[k] || k;
@@ -130,12 +131,15 @@ export default function Profile() {
           </>
         )}
 
-               <CalendlyConnect />
-                 <div className="plat" style={{ marginTop: "24px" }}>
-          <h3>Booking link</h3>
+        <FollowUps />
+
+        <CalendlyConnect />
+
+        <div className="plat" style={{ marginTop: "24px" }}>
+          <h3>Booking link (manual)</h3>
           <p className="note-s">
-            Paste your Cal.com or Calendly link. Plyde adds a line to every email you send so
-            interested people can book a call straight away. You don't have to do anything else.
+            Not using Calendly? Paste any booking link here instead. Plyde adds it to every email
+            you send.
           </p>
           <input
             className="in"
@@ -203,4 +207,4 @@ export default function Profile() {
       </section>
     </>
   );
-              }
+          }
