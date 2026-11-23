@@ -1,4 +1,5 @@
 import { askAI } from "../../ai";
+import { owner } from "../../db";
 
 async function searchWeb(query, key) {
   try {
@@ -26,6 +27,10 @@ function cleanDomain(raw) {
 }
 
 export async function POST(request) {
+  if (!owner(request)) {
+    return Response.json({ error: "Connect Gmail first." }, { status: 401 });
+  }
+
   let body;
   try {
     body = await request.json();
