@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "./Header";
 import Rewrite from "./Rewrite";
+import TryIt from "./TryIt";
 import useGmail from "./useGmail";
 import useName from "./useName";
 
@@ -59,6 +60,7 @@ export default function Home() {
               Plyde asks Google only for permission to send emails you approve. It cannot read your
               inbox.
             </p>
+            <TryIt />
           </>
         )}
 
