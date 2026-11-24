@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { post } from "./ui";
 import ReplyHelper from "./ReplyHelper";
-
 
 const BATCH_MAX = 20;
 const GAP_MIN = 45;
@@ -64,8 +63,18 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
   const [running, setRunning] = useState(false);
   const [lines, setLines] = useState([]);
   const [countdown, setCountdown] = useState(0);
+  const [credits, setCredits] = useState(null);
   const [, setTick] = useState(0);
   const stopRef = useRef(false);
+
+  useEffect(() => {
+    fetch("/api/credits?balanceOnly=1")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j && typeof j.balance === "number") setCredits(j.balance);
+      })
+      .catch(() => {});
+  }, []);
 
   const rows = cards
     .map((c) => prepare(c, sentLog))
@@ -75,6 +84,8 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
   const chosen = ready.filter((r) => picked[r.site]);
 
   if (rows.length === 0) return null;
+
+  const cap = credits === null ? BATCH_MAX : Math.max(0, Math.min(BATCH_MAX, credits));
 
   function add(line) {
     setLines((p) => [...p, line]);
@@ -101,7 +112,11 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
   }
 
   async function run(source) {
-    const list = source.slice(0, BATCH_MAX);
+    if (cap === 0) {
+      add("You are out of credits. Open Credits to top up.");
+      return;
+    }
+    const list = source.slice(0, cap);
     if (!list.length) return;
     if (!gmail.connected) {
       add("Connect Gmail first.");
@@ -109,7 +124,7 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
     }
     const left = source.length - list.length;
     const ok = window.confirm(
-      `Send ${list.length} email${list.length > 1 ? "s" : ""} from ${gmail.email || "your Gmail"}?\n\nThey go out one at a time, about 1 to 2 minutes apart. Keep this page open and your screen on until it finishes.` +
+      `Send ${list.length} email${list.length > 1 ? "s" : ""} from ${gmail.email || "your Gmail"}? This uses ${list.length} credit${list.length > 1 ? "s" : ""}.\n\nThey go out one at a time, about 1 to 2 minutes apart. Keep this page open and your screen on until it finishes.` +
         (left > 0 ? `\n\n${left} more will wait for the next batch.` : "")
     );
     if (!ok) return;
@@ -139,9 +154,17 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
         sent++;
         onSent(r.site, r.to, r.subject);
         add(`Sent to ${r.to}`);
+        if (res.json && typeof res.json.creditsLeft === "number") {
+          setCredits(res.json.creditsLeft);
+        }
       } else {
         const err = (res.json && res.json.error) || "Could not send.";
         add(`Skipped ${r.to}: ${err}`);
+        if (res.json && res.json.credits) {
+          add("Stopped. You are out of credits.");
+          setCredits(0);
+          break;
+        }
         if (res.json && res.json.reconnect) {
           if (gmail.refresh) gmail.refresh();
           add("Stopped. Reconnect Gmail and try again.");
@@ -185,16 +208,19 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
         a time. Plyde sends them one by one, about 1 to 2 minutes apart, so your Gmail is not
         flagged. Keep this page open while it runs.
       </p>
+      <p className="note-s">
+        Credits:{" "}
+        <b>{credits === null ? "..." : credits}</b> (1 credit per email).{" "}
+        <a href="/credits">View history</a>
+      </p>
 
       <div className="actions" style={{ marginBottom: "12px" }}>
         <button
           className="btn solid"
-          disabled={running || ready.length === 0}
+          disabled={running || ready.length === 0 || cap === 0}
           onClick={() => run(ready)}
         >
-          {running
-            ? "Sending..."
-            : `Send all ready (${Math.min(BATCH_MAX, ready.length)})`}
+          {running ? "Sending..." : `Send all ready (${Math.min(cap, ready.length)})`}
         </button>
         <button className="btn" disabled={running} onClick={selectFirst}>
           Select first {Math.min(BATCH_MAX, ready.length)} ready
@@ -203,6 +229,9 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
           Refresh list
         </button>
       </div>
+      {credits === 0 && (
+        <p className="msg">You are out of credits. Open Credits to top up.</p>
+      )}
 
       {rows.map((r) => (
         <div key={r.site} style={rowStyle}>
@@ -235,7 +264,7 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
       <div className="actions" style={{ marginTop: "16px" }}>
         <button
           className="btn"
-          disabled={running || chosen.length === 0}
+          disabled={running || chosen.length === 0 || cap === 0}
           onClick={() => run(chosen)}
         >
           {running ? "Sending..." : `Send ticked (${chosen.length})`}
@@ -259,8 +288,8 @@ export default function BatchSend({ cards, sentLog, gmail, onSent }) {
         Risky or invalid addresses are skipped automatically. An opt-out line is added to every
         email.
       </p>
-                <ReplyHelper sentLog={sentLog} />
 
+      <ReplyHelper sentLog={sentLog} />
     </div>
   );
 }
