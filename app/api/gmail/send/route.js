@@ -6,6 +6,8 @@ import { db } from "../../../db";
 export const dynamic = "force-dynamic";
 
 const DAILY_LIMIT = 20;
+const SEND_COST = 1;
+const SIGNUP_BONUS = 20;
 const EMAIL_RE = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]{2,}$/;
 const OPT_OUT = '\n\n--\nNot interested? Just reply "no thanks" and I will not contact you again.';
 
@@ -13,9 +15,8 @@ function oneLine(value, max) {
   return String(value || "").replace(/[\r\n]+/g, " ").trim().slice(0, max);
 }
 
-async function bookingLink(session) {
+async function bookingLink(email) {
   try {
-    const email = session && session.email ? String(session.email).toLowerCase() : "";
     if (!email) return "";
     const { data } = await db()
       .from("profiles")
@@ -27,6 +28,22 @@ async function bookingLink(session) {
     return link;
   } catch {
     return "";
+  }
+}
+
+async function adjust(email, delta, reason, ref) {
+  try {
+    const { data, error } = await db().rpc("credit_adjust", {
+      p_email: email,
+      p_delta: delta,
+      p_reason: reason,
+      p_ref: ref,
+      p_bonus: SIGNUP_BONUS,
+    });
+    if (error) return { failed: true, balance: -1 };
+    return { failed: false, balance: Number(data) };
+  } catch {
+    return { failed: true, balance: -1 };
   }
 }
 
@@ -46,6 +63,13 @@ export async function POST(request) {
   if (!session) {
     return NextResponse.json(
       { error: "Connect Gmail first.", reconnect: true },
+      { status: 401 }
+    );
+  }
+  const email = session.email ? String(session.email).toLowerCase() : "";
+  if (!email) {
+    return NextResponse.json(
+      { error: "Please reconnect Gmail.", reconnect: true },
       { status: 401 }
     );
   }
@@ -88,7 +112,7 @@ export async function POST(request) {
     );
   }
 
-  const link = b.noBooking === true ? "" : await bookingLink(session);
+  const link = b.noBooking === true ? "" : await bookingLink(email);
   const fullText =
     link && !text.includes(link)
       ? text + "\n\nIf you'd like to talk, you can pick a time here: " + link
@@ -123,6 +147,17 @@ export async function POST(request) {
     return NextResponse.json({ error: "Could not reach Google. Try again." }, { status: 502 });
   }
 
+  const charged = await adjust(email, -SEND_COST, "send", to);
+  if (charged.failed) {
+    return NextResponse.json({ error: "Could not check your credits. Try again." }, { status: 500 });
+  }
+  if (charged.balance < 0) {
+    return NextResponse.json(
+      { error: "You are out of credits. Open Credits to top up.", credits: true },
+      { status: 402 }
+    );
+  }
+
   const subjectEncoded = `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`;
   const bodyEncoded = Buffer.from(fullText + OPT_OUT, "utf8")
     .toString("base64")
@@ -138,6 +173,7 @@ export async function POST(request) {
   ].join("\r\n");
   const raw = Buffer.from(message).toString("base64url");
 
+  let sendError = "";
   try {
     const send = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
       method: "POST",
@@ -153,16 +189,25 @@ export async function POST(request) {
       try {
         reason = String((await send.json())?.error?.message || "").slice(0, 150);
       } catch {}
-      return NextResponse.json(
-        { error: "Gmail could not send this message." + (reason ? " (" + reason + ")" : "") },
-        { status: 502 }
-      );
+      sendError = "Gmail could not send this message." + (reason ? " (" + reason + ")" : "");
     }
   } catch {
-    return NextResponse.json({ error: "Gmail did not respond. Try again." }, { status: 502 });
+    sendError = "Gmail did not respond. Try again.";
   }
 
-  const res = NextResponse.json({ ok: true, remainingToday: DAILY_LIMIT - count - 1 });
+  if (sendError) {
+    await adjust(email, SEND_COST, "refund", to);
+    return NextResponse.json(
+      { error: sendError + " Your credit was returned." },
+      { status: 502 }
+    );
+  }
+
+  const res = NextResponse.json({
+    ok: true,
+    remainingToday: DAILY_LIMIT - count - 1,
+    creditsLeft: charged.balance,
+  });
   res.cookies.set("plyde_sent", JSON.stringify({ d: today, n: count + 1 }), {
     ...COOKIE,
     maxAge: 60 * 60 * 48,
