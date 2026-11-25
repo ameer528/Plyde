@@ -144,17 +144,20 @@ export default function Setup() {
             Want it connected instead of pasted? You can do that later in Settings.
           </p>
 
-          <label className="lbl">Emails to send per day (1 to 50)</label>
+          <label className="lbl">Emails to send per day (1 to 1000)</label>
           <input
             className="in"
             type="number"
             min="1"
-            max="50"
+            max="1000"
             value={limit}
             onChange={(e) => setLimit(e.target.value)}
           />
           <p className="note-s">
-            Start with 20. New sending patterns can get a Gmail account flagged, so raise it slowly.
+            Start at 20 and raise it slowly. Gmail has its own daily cap (about 2,000 on paid
+            Google Workspace, lower on free Gmail), and a sudden jump in volume can get your
+            account flagged. Plyde sends one email at a time, so large batches take hours and the
+            page has to stay open.
           </p>
 
           <div className="actions">
@@ -167,4 +170,4 @@ export default function Setup() {
       </section>
     </>
   );
-                   }
+    }
