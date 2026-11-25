@@ -1,5 +1,10 @@
 import { db } from "./db";
 
+const EMBED_MODEL = "gemini-embedding-001";
+const EMBED_DIMS = 768;
+const MIN_SIM = 0.6;
+const EMBED_BACKFILL = 40;
+
 const STOP = new Set([
   "our", "clients", "client", "book", "call", "case", "studies", "study",
   "services", "service", "contact", "just", "launched", "small", "team",
@@ -26,7 +31,94 @@ function terms(query) {
   return [...new Set(words)].slice(0, 3);
 }
 
-async function fromIndex(query, opts) {
+async function embedBatch(texts, taskType) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || !texts.length) return null;
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL}:batchEmbedContents`,
+      {
+        method: "POST",
+        signal: AbortSignal.timeout(12000),
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({
+          requests: texts.map((t) => ({
+            model: "models/" + EMBED_MODEL,
+            content: { parts: [{ text: t }] },
+            taskType,
+            outputDimensionality: EMBED_DIMS,
+          })),
+        }),
+      }
+    );
+    if (!res.ok) {
+      console.error("embed-failed", res.status);
+      return null;
+    }
+    const data = await res.json();
+    const out = (data.embeddings || []).map((e) => e.values);
+    return out.length === texts.length && out.every((v) => Array.isArray(v) && v.length) ? out : null;
+  } catch (e) {
+    console.error("embed-exception", String(e && e.message ? e.message : e));
+    return null;
+  }
+}
+
+async function embedMissing(limit) {
+  try {
+    const { data } = await db()
+      .from("company_index")
+      .select("host,title,snippet")
+      .is("embedding", null)
+      .order("last_seen", { ascending: false })
+      .limit(limit);
+    if (!data || !data.length) return;
+    const texts = data.map((r) =>
+      `${r.title || ""}. ${r.snippet || ""} (${r.host})`.slice(0, 1500)
+    );
+    const vecs = await embedBatch(texts, "RETRIEVAL_DOCUMENT");
+    if (!vecs) return;
+    const rows = data.map((r, i) => ({ host: r.host, embedding: vecs[i] }));
+    await db().rpc("index_set_embeddings", { p_rows: rows });
+  } catch {}
+}
+
+async function semantic(query, opts) {
+  try {
+    const q = await embedBatch([query], "RETRIEVAL_QUERY");
+    if (!q) return null;
+    const exclude = Array.from(opts.known || []).slice(0, 5000);
+    const { data, error } = await db().rpc("index_semantic", {
+      p_embedding: q[0],
+      p_exclude: exclude,
+      p_limit: 20,
+      p_min: MIN_SIM,
+    });
+    if (error) {
+      console.error("index-semantic-error", error.message);
+      return null;
+    }
+    const list = Array.isArray(data) ? data : [];
+    console.log("index-semantic", {
+      found: list.length,
+      best: list[0] ? Number(list[0].similarity).toFixed(3) : null,
+    });
+    if (list.length < 8) return null;
+    return {
+      status: 200,
+      provider: "index-semantic",
+      results: list.map((r) => ({
+        url: r.url,
+        title: r.title || "",
+        content: r.snippet || "",
+      })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function keyword(query, opts) {
   try {
     const t = terms(query);
     if (t.length < 2) return null;
@@ -49,6 +141,12 @@ async function fromIndex(query, opts) {
   } catch {
     return null;
   }
+}
+
+async function fromIndex(query, opts) {
+  const s = await semantic(query, opts);
+  if (s) return s;
+  return keyword(query, opts);
 }
 
 async function store(results, skip) {
@@ -74,6 +172,7 @@ async function store(results, skip) {
       });
     }
     if (rows.length) await db().rpc("index_upsert", { p_rows: rows });
+    await embedMissing(EMBED_BACKFILL);
   } catch {}
 }
 
