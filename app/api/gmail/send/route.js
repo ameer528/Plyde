@@ -5,7 +5,8 @@ import { db } from "../../../db";
 
 export const dynamic = "force-dynamic";
 
-const DAILY_LIMIT = 20;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 50;
 const SEND_COST = 1;
 const SIGNUP_BONUS = 20;
 const EMAIL_RE = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]{2,}$/;
@@ -15,19 +16,21 @@ function oneLine(value, max) {
   return String(value || "").replace(/[\r\n]+/g, " ").trim().slice(0, max);
 }
 
-async function bookingLink(email) {
+async function loadProfile(email) {
   try {
-    if (!email) return "";
     const { data } = await db()
       .from("profiles")
-      .select("booking_link")
+      .select("booking_link,daily_limit")
       .eq("owner_email", email)
       .maybeSingle();
     const link = String((data && data.booking_link) || "").trim();
-    if (!/^https:\/\/\S+$/i.test(link) || link.length > 300) return "";
-    return link;
+    const n = Math.round(Number(data && data.daily_limit));
+    return {
+      link: /^https:\/\/\S+$/i.test(link) && link.length <= 300 ? link : "",
+      limit: n >= 1 ? Math.min(MAX_LIMIT, n) : DEFAULT_LIMIT,
+    };
   } catch {
-    return "";
+    return { link: "", limit: DEFAULT_LIMIT };
   }
 }
 
@@ -99,20 +102,23 @@ export async function POST(request) {
     );
   }
 
+  const prof = await loadProfile(email);
+  const dailyLimit = prof.limit;
+
   const today = new Date().toISOString().slice(0, 10);
   let count = 0;
   try {
     const c = JSON.parse(request.cookies.get("plyde_sent")?.value || "{}");
     if (c.d === today) count = Number(c.n) || 0;
   } catch {}
-  if (count >= DAILY_LIMIT) {
+  if (count >= dailyLimit) {
     return NextResponse.json(
-      { error: `Daily limit of ${DAILY_LIMIT} emails reached. Try again tomorrow.` },
+      { error: `Daily limit of ${dailyLimit} emails reached. Try again tomorrow.` },
       { status: 429 }
     );
   }
 
-  const link = b.noBooking === true ? "" : await bookingLink(email);
+  const link = b.noBooking === true ? "" : prof.link;
   const fullText =
     link && !text.includes(link)
       ? text + "\n\nIf you'd like to talk, you can pick a time here: " + link
@@ -205,7 +211,7 @@ export async function POST(request) {
 
   const res = NextResponse.json({
     ok: true,
-    remainingToday: DAILY_LIMIT - count - 1,
+    remainingToday: dailyLimit - count - 1,
     creditsLeft: charged.balance,
   });
   res.cookies.set("plyde_sent", JSON.stringify({ d: today, n: count + 1 }), {
@@ -213,4 +219,4 @@ export async function POST(request) {
     maxAge: 60 * 60 * 48,
   });
   return res;
-}
+    }
