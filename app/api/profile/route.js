@@ -49,9 +49,9 @@ export async function POST(request) {
     if (!(n >= 1)) {
       return NextResponse.json({ error: "The daily limit must be at least 1." }, { status: 400 });
     }
-    patch.daily_limit = Math.min(50, n);
+    patch.daily_limit = Math.min(1000, n);
   }
   const { error } = await db().from("profiles").upsert(patch, { onConflict: "owner_email" });
   if (error) return NextResponse.json({ error: "Could not save." }, { status: 500 });
   return NextResponse.json({ ok: true });
-    }
+}
