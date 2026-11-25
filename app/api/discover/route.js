@@ -1,6 +1,7 @@
 import { askAI } from "../../ai";
 import { db, owner } from "../../db";
 import { checkLimit } from "../../usage";
+import { webSearch, hasSearchKey } from "../../search";
 
 const SKIP = [
   "linkedin.com", "facebook.com", "instagram.com", "twitter.com", "x.com",
@@ -86,32 +87,6 @@ Return ONLY valid JSON: {"queries": ["query 1", "query 2", "query 3"]}`;
   return fallback;
 }
 
-async function tavily(query, key, withDate) {
-  try {
-    const payload = {
-      query,
-      search_depth: "basic",
-      max_results: 10,
-      exclude_domains: SKIP,
-    };
-    if (withDate) payload.time_range = "year";
-    const res = await fetch("https://api.tavily.com/search", {
-      method: "POST",
-      signal: AbortSignal.timeout(15000),
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) return { status: res.status, results: [] };
-    const data = await res.json();
-    return { status: 200, results: data.results || [] };
-  } catch {
-    return { status: -2, results: [] };
-  }
-}
-
 async function screen(sites, profile) {
   if (!sites.length) return sites;
   const list = sites
@@ -169,8 +144,7 @@ export async function POST(request) {
     return Response.json({ error: "Missing your business profile." }, { status: 400 });
   }
 
-  const tkey = process.env.TAVILY_API_KEY;
-  if (!tkey) {
+  if (!hasSearchKey()) {
     return Response.json({ error: "The search key is missing on the server." }, { status: 500 });
   }
 
@@ -203,23 +177,29 @@ export async function POST(request) {
   }
 
   for (const q of queries) {
-    const out = await tavily(q, tkey, true);
+    const out = await webSearch(q, { skip: SKIP, withDate: true, known });
     lastStatus = out.status;
     collect(out.results);
   }
 
   if (sites.length < 6) {
-    const out = await tavily(queries[0], tkey, false);
+    const out = await webSearch(queries[0], { skip: SKIP, withDate: false, known });
     lastStatus = out.status;
     collect(out.results);
   }
 
   if (!sites.length) {
     if (lastStatus === 401 || lastStatus === 403) {
-      return Response.json({ error: "The search key was rejected. Check TAVILY_API_KEY in Vercel." }, { status: 502 });
+      return Response.json(
+        { error: "A search key was rejected. Check TAVILY_API_KEY and EXA_API_KEY in Vercel." },
+        { status: 502 }
+      );
     }
-    if (lastStatus === 429 || lastStatus === 432 || lastStatus === 433) {
-      return Response.json({ error: "The free search limit was reached. Try again later." }, { status: 502 });
+    if ([402, 429, 432, 433].includes(lastStatus)) {
+      return Response.json(
+        { error: "The free search limit was reached. Try again later." },
+        { status: 502 }
+      );
     }
     if (skippedKnown > 0) {
       return Response.json(
@@ -241,4 +221,4 @@ export async function POST(request) {
     skipped_known: skippedKnown,
     sites: screened.map((s) => ({ host: s.host, url: s.url, title: s.title })),
   });
-    }
+                                                     }
