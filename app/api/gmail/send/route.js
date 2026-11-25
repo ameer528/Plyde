@@ -6,7 +6,7 @@ import { db } from "../../../db";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 50;
+const MAX_LIMIT = 1000;
 const SEND_COST = 1;
 const SIGNUP_BONUS = 20;
 const EMAIL_RE = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]{2,}$/;
@@ -219,4 +219,4 @@ export async function POST(request) {
     maxAge: 60 * 60 * 48,
   });
   return res;
-    }
+      }
