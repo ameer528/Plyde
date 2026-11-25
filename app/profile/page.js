@@ -7,7 +7,6 @@ import Header from "../Header";
 import useGmail from "../useGmail";
 import { LABELS } from "../ui";
 import CalendlyConnect from "../CalendlyConnect";
-import FollowUps from "../FollowUps";
 import "../profile.css";
 
 function channelName(k) {
@@ -87,6 +86,11 @@ export default function Profile() {
     <>
       <Header gmail={gmail} name={name} onDisconnect={disconnect} />
       <section className="hero narrow">
+        <p>
+          <Link className="btn" href="/">
+            Back to Home
+          </Link>
+        </p>
         <h1 className="h1s">{name ? `${name}'s campaigns` : "Your campaigns"}</h1>
         <p className="lead">
           How your outreach is going: what you sent, who replied and which calls got booked.
@@ -131,33 +135,36 @@ export default function Profile() {
           </>
         )}
 
-        <FollowUps />
-
-        <CalendlyConnect />
-
-        <div className="plat" style={{ marginTop: "24px" }}>
-          <h3>Booking link (manual)</h3>
-          <p className="note-s">
-            Not using Calendly? Paste any booking link here instead. Plyde adds it to every email
-            you send.
-          </p>
-          <input
-            className="in"
-            value={link}
-            onChange={(e) => setLink(e.target.value)}
-            placeholder="https://cal.com/your-name/intro-call"
-          />
-          <div className="actions">
-            <button className="btn solid" disabled={saving} onClick={saveLink}>
-              {saving ? "Saving..." : "Save link"}
-            </button>
+        <details style={{ marginTop: "24px" }}>
+          <summary>Booking link and calendar</summary>
+          <CalendlyConnect />
+          <div className="plat" style={{ marginTop: "24px" }}>
+            <h3>Booking link (manual)</h3>
+            <p className="note-s">
+              Not using Calendly? Paste any booking link here instead. Plyde adds it to every email
+              you send.
+            </p>
+            <input
+              className="in"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              placeholder="https://cal.com/your-name/intro-call"
+            />
+            <div className="actions">
+              <button className="btn solid" disabled={saving} onClick={saveLink}>
+                {saving ? "Saving..." : "Save link"}
+              </button>
+            </div>
+            {linkMsg && <p className="msg">{linkMsg}</p>}
           </div>
-          {linkMsg && <p className="msg">{linkMsg}</p>}
-        </div>
+        </details>
 
         <div className="ctas">
           <Link className="cta" href="/campaign">
             Run a campaign
+          </Link>
+          <Link className="cta ghost" href="/">
+            Back to Home
           </Link>
         </div>
       </section>
@@ -207,4 +214,4 @@ export default function Profile() {
       </section>
     </>
   );
-          }
+    }
