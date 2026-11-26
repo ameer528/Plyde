@@ -80,3 +80,22 @@
 .acct-out {
   color: #ff8a8a;
 }
+
+.btn.solid {
+  display: inline-block;
+  background: var(--paper, #f4f4f4);
+  color: #000;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 22px;
+  font-weight: 600;
+  font-size: 16px;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn.solid[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
