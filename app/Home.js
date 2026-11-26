@@ -6,6 +6,7 @@ import Link from "next/link";
 import Header from "./Header";
 import Rewrite from "./Rewrite";
 import TryIt from "./TryIt";
+import Story from "./Story";
 import useGmail from "./useGmail";
 import useName from "./useName";
 
@@ -15,6 +16,9 @@ export default function Home() {
   const { name, loaded } = useName(gmail.connected);
   const [hasSession, setHasSession] = useState(false);
   const [notice, setNotice] = useState("");
+  const [business, setBusiness] = useState("");
+
+  const signedIn = gmail.loaded && gmail.connected && loaded && !!name;
 
   useEffect(() => {
     try {
@@ -34,6 +38,18 @@ export default function Home() {
   useEffect(() => {
     if (loaded && gmail.loaded && gmail.connected && !name) router.replace("/welcome");
   }, [loaded, gmail, name, router]);
+
+  useEffect(() => {
+    if (!signedIn) return;
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j) return;
+        const text = j.website || String(j.description || "").slice(0, 60);
+        if (text) setBusiness(text);
+      })
+      .catch(() => {});
+  }, [signedIn]);
 
   return (
     <>
@@ -64,12 +80,20 @@ export default function Home() {
           </>
         )}
 
-        {gmail.loaded && gmail.connected && loaded && name && (
+        {signedIn && (
           <>
             <p className="greet">Welcome back, {name}.</p>
+            {business && (
+              <p className="note-s">
+                Searching for: {business} · <Link href="/setup">Change</Link>
+              </p>
+            )}
             <div className="ctas">
               <Link className="cta" href="/campaign">
                 Run a campaign
+              </Link>
+              <Link className="cta ghost" href="/go">
+                Find clients faster
               </Link>
               {hasSession && (
                 <Link className="cta ghost" href="/campaign/run">
@@ -77,6 +101,9 @@ export default function Home() {
                 </Link>
               )}
             </div>
+            <p className="note" style={{ marginTop: "16px" }}>
+              <Link href="/credits">Credits</Link> · <Link href="/setup">Edit your setup</Link>
+            </p>
           </>
         )}
 
@@ -97,7 +124,9 @@ export default function Home() {
             <p>It writes outreach for each channel. You edit, approve and send.</p>
           </li>
         </ol>
+
+        {gmail.loaded && !gmail.connected && <Story />}
       </section>
     </>
   );
-}
+          }
