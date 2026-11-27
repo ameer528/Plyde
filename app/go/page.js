@@ -341,7 +341,7 @@ export default function Go() {
       return;
     }
     if (room === 0) {
-      setLines([`You reached your daily limit of ${dailyLimit}. Come back tomorrow, or change it in your setup.`]);
+      setLines([`You reached today's limit of ${dailyLimit}. Come back tomorrow, or upgrade to Premium for a higher limit.`]);
       return;
     }
     const list = readyList.slice(0, cap);
@@ -470,7 +470,8 @@ export default function Go() {
                 <b>
                   {sentToday} of {dailyLimit}
                 </b>{" "}
-                sent. <Link href="/credits">History</Link> · <Link href="/setup">Change limit</Link>
+                sent. <Link href="/credits">History</Link> ·{" "}
+                <Link href="/credits">Upgrade to Premium</Link>
               </p>
               <div className="actions">
                 <button
@@ -554,4 +555,4 @@ export default function Go() {
       )}
     </>
   );
-}
+                 }
