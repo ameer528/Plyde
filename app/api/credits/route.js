@@ -26,6 +26,14 @@ export async function GET(request) {
     return NextResponse.json({ balance });
   }
 
+  const { data: acct } = await supabase
+    .from("credits")
+    .select("plan,plan_until")
+    .eq("owner_email", email)
+    .maybeSingle();
+  const until = acct && acct.plan_until ? new Date(acct.plan_until).getTime() : 0;
+  const premium = !!acct && acct.plan === "premium" && until > Date.now();
+
   const { data: rows } = await supabase
     .from("credit_ledger")
     .select("id,delta,reason,ref,balance_after,created_at")
@@ -41,5 +49,12 @@ export async function GET(request) {
     else if (r.reason === "refund") used -= r.delta;
     else if (r.delta > 0) added += r.delta;
   }
-  return NextResponse.json({ balance, used, added, history: list.slice(0, 100) });
+  return NextResponse.json({
+    balance,
+    used,
+    added,
+    plan: premium ? "premium" : "free",
+    planUntil: premium ? acct.plan_until : null,
+    history: list.slice(0, 100),
+  });
 }
