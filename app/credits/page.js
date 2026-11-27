@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "../Header";
 import useGmail from "../useGmail";
+import { PLANS } from "../plans";
 import "../profile.css";
 
 function label(r) {
   if (r.reason === "signup_bonus") return "Welcome credits";
   if (r.reason === "send") return "Email sent to " + (r.ref || "a prospect");
   if (r.reason === "refund") return "Refund, send failed (" + (r.ref || "") + ")";
-  if (r.reason === "purchase") return "Credits purchased";
+  if (r.reason === "purchase") return "Premium credits";
   if (r.reason === "admin") return "Credits added by Plyde";
   return r.reason;
 }
@@ -33,6 +34,9 @@ export default function Credits() {
   const [name, setName] = useState("");
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+
+  const p = PLANS.premium;
+  const perEmail = (p.priceUsd / p.credits).toFixed(2);
 
   useEffect(() => {
     try {
@@ -96,16 +100,32 @@ export default function Credits() {
             </div>
 
             <div className="plat" style={{ marginTop: "24px" }}>
-              <h3>Need more credits?</h3>
-              <p className="note-s">
-                Online payments are coming soon. Until then, message us and we will add credits to
-                your account, and the purchase will show in your history below.
-              </p>
-              <div className="actions">
-                <button className="btn solid" disabled>
-                  Buy credits (coming soon)
-                </button>
-              </div>
+              {data.plan === "premium" ? (
+                <>
+                  <h3>Premium is active</h3>
+                  <p className="note-s">
+                    Active until {new Date(data.planUntil).toLocaleDateString()}. You can send up
+                    to {p.dailyLimit} emails a day.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3>Upgrade to Premium</h3>
+                  <p style={{ margin: "0 0 6px" }}>
+                    <b>${p.priceUsd} a month</b>
+                  </p>
+                  <p className="note-s">
+                    {p.credits} credits every month (about ${perEmail} per email) and up to{" "}
+                    {p.dailyLimit} emails a day. The free plan allows {PLANS.free.dailyLimit} a day.
+                  </p>
+                  <p className="note-s">Online payments are coming soon.</p>
+                  <div className="actions">
+                    <button className="btn solid" disabled>
+                      Upgrade to Premium (coming soon)
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </>
         )}
@@ -113,6 +133,9 @@ export default function Credits() {
         <div className="ctas">
           <Link className="cta" href="/campaign">
             Run a campaign
+          </Link>
+          <Link className="cta ghost" href="/">
+            Back to Home
           </Link>
         </div>
       </section>
@@ -153,4 +176,4 @@ export default function Credits() {
       </section>
     </>
   );
-    }
+                    }
