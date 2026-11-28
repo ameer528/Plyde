@@ -5,6 +5,7 @@ const MAX_ROWS = Number(process.env.MAX_ROWS || 60000);
 const PER_QUERY = Number(process.env.PER_QUERY || 80);
 const PAIRS = Number(process.env.PAIRS || 30);
 const HN_WINDOWS = Number(process.env.HN_WINDOWS || 8);
+const LAUNCH_WINDOWS = Number(process.env.LAUNCH_WINDOWS || 10);
 const EMBED_BUDGET = Number(process.env.EMBED_BUDGET || 3000);
 const DEADLINE = Date.now() + 75 * 60 * 1000;
 const OVERPASS = "https://overpass-api.de/api/interpreter";
@@ -47,7 +48,7 @@ const SKIP = [
   "pages.dev", "herokuapp.com", "onrender.com", "replit.app", "replit.dev",
   "apps.apple.com", "play.google.com", "medium.com", "substack.com",
   "notion.site", "notion.so", "reddit.com", "arxiv.org", "news.ycombinator.com",
-  "itch.io", "chrome.google.com", "chromewebstore.google.com",
+  "ycombinator.com", "itch.io", "chrome.google.com", "chromewebstore.google.com",
   "huggingface.co", "kickstarter.com", "producthunt.com", "t.me",
 ];
 
@@ -63,12 +64,30 @@ function shuffle(list) {
   return list;
 }
 
-function stripHtml(s) {
+function decode(s) {
   return String(s || "")
+    .replace(/&#x2F;/gi, "/")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&amp;/gi, "&");
+}
+
+function stripHtml(s) {
+  return decode(s)
     .replace(/<[^>]+>/g, " ")
     .replace(/&[a-z#0-9]+;/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function firstLink(html) {
+  const text = decode(html);
+  const re = /href="(https?:\/\/[^"]+)"/gi;
+  let m;
+  while ((m = re.exec(text))) {
+    if (!/ycombinator\.com|news\.ycombinator/i.test(m[1])) return m[1];
+  }
+  return "";
 }
 
 async function rest(path, opts) {
@@ -223,6 +242,58 @@ async function seedHN() {
   console.log("Show HN companies added:", added);
 }
 
+async function seedLaunch() {
+  const now = Math.floor(Date.now() / 1000);
+  const span = 90 * 86400;
+  const windows = shuffle(Array.from({ length: 24 }, (_, i) => i));
+  let added = 0;
+  for (const w of windows.slice(0, LAUNCH_WINDOWS)) {
+    if (Date.now() > DEADLINE) break;
+    const to = now - w * span;
+    const from = to - span;
+    const filters = encodeURIComponent(`created_at_i>=${from},created_at_i<${to}`);
+    const q = encodeURIComponent('"Launch HN"');
+    const url = `https://hn.algolia.com/api/v1/search_by_date?query=${q}&tags=story&hitsPerPage=200&numericFilters=${filters}`;
+    try {
+      const res = await fetch(url, { headers: { "User-Agent": UA } });
+      if (!res.ok) {
+        console.log("Launch HN feed error", res.status);
+        await sleep(5000);
+        continue;
+      }
+      const data = await res.json();
+      const seen = new Set();
+      const rows = [];
+      for (const h of data.hits || []) {
+        const title = String(h.title || "");
+        if (!/^launch hn:/i.test(title)) continue;
+        const rest = title.replace(/^launch hn:\s*/i, "");
+        const m = rest.match(/^(.+?)(?:\s*\((YC\s*[A-Z]\d{2})\))?\s*[–—-]\s*(.*)$/);
+        const name = (m ? m[1] : rest).trim();
+        const batch = m && m[2] ? m[2] : "";
+        const tagline = m ? m[3].trim() : "";
+        const link = h.url || firstLink(h.story_text);
+        const text = stripHtml(h.story_text).slice(0, 200);
+        const row = makeRow(
+          link,
+          `${name} (Launch HN, ${batch || "startup"})`,
+          `Y Combinator-backed startup launch${batch ? " (" + batch + ")" : ""}: ${name}. ${tagline}. ${text}`
+        );
+        if (row && !seen.has(row.host)) {
+          seen.add(row.host);
+          rows.push(row);
+        }
+      }
+      added += await saveRows(rows);
+      console.log(`Launch HN window ${w}: ${rows.length} found`);
+    } catch (e) {
+      console.log("Launch HN error:", String(e && e.message ? e.message : e));
+    }
+    await sleep(2500);
+  }
+  console.log("Launch HN companies added:", added);
+}
+
 async function embedBatch(texts) {
   const res = await fetch(
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents",
@@ -302,6 +373,7 @@ async function main() {
     console.log("Index is at the size cap, nothing to add.");
     return;
   }
+  await seedLaunch();
   await seedHN();
   await seedOSM();
   await embedBackfill();
